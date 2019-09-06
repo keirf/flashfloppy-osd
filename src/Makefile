@@ -1,0 +1,11 @@
+OBJS += cancellation.o
+OBJS += config.o
+OBJS += console.o
+OBJS += lcd.o
+OBJS += main.o
+OBJS += string.o
+OBJS += stm32f10x.o
+OBJS += time.o
+OBJS += timer.o
+OBJS += util.o
+OBJS += vectors.o
