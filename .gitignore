@@ -7,4 +7,4 @@
 *.hex
 *.orig
 *.rej
-kswitch_v2*
+/FF_OSD*

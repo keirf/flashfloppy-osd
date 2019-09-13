@@ -49,7 +49,7 @@ void config_init(void)
 {
     uint16_t crc;
 
-    printk("\n** FF OSD v1.0 **\n");
+    printk("\n** FF OSD v%s **\n", fw_ver);
     printk("** Keir Fraser <keir.xen@gmail.com>\n");
     printk("** https://github.com/keirf/FF_OSD\n");
 
@@ -73,6 +73,7 @@ struct display config_display = {
 
 static enum {
     C_idle = 0,
+    C_banner,
     C_polarity,
     C_h_off,
     C_v_off,
@@ -129,6 +130,12 @@ void config_process(uint8_t b)
 
     switch (config_state) {
     default:
+        break;
+    case C_banner:
+        if (changed) {
+            cnf_prt(0, "FF OSD v%s", fw_ver);
+            cnf_prt(1, "Flash Config");
+        }
         break;
     case C_polarity:
         if (changed)

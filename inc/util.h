@@ -109,6 +109,9 @@ extern struct display config_display;
 void slave_arr_update(void);
 void set_polarity(void);
 
+/* Build info. */
+extern const char fw_ver[];
+
 /* Text/data/BSS address ranges. */
 extern char _stext[], _etext[];
 extern char _sdat[], _edat[], _ldat[];

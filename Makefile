@@ -1,5 +1,5 @@
 
-export FW_VER := 0.1a
+export FW_VER := 1.0
 
 PROJ = FF_OSD
 VER := v$(FW_VER)
@@ -21,10 +21,12 @@ clean:
 dist: all
 	rm -rf $(PROJ)-$(VER)*
 	mkdir -p $(PROJ)-$(VER)
-	cp -a src/$(PROJ).elf $(PROJ)-$(VER)
-	cp -a src/$(PROJ).bin $(PROJ)-$(VER)
-	cp -a src/$(PROJ).hex $(PROJ)-$(VER)
-	zip -r $(PROJ)-$(VER) $(PROJ)-$(VER)
+	cp -a src/$(PROJ).elf $(PROJ)-$(VER)/$(PROJ)-$(VER).elf
+	cp -a src/$(PROJ).bin $(PROJ)-$(VER)/$(PROJ)-$(VER).bin
+	cp -a src/$(PROJ).hex $(PROJ)-$(VER)/$(PROJ)-$(VER).hex
+	cp -a COPYING $(PROJ)-$(VER)/
+	cp -a README.md $(PROJ)-$(VER)/
+	zip -r $(PROJ)-$(VER).zip $(PROJ)-$(VER)
 	rm -rf $(PROJ)-$(VER)
 
 endif

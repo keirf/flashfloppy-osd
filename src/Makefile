@@ -1,3 +1,4 @@
+OBJS += build_info.o
 OBJS += cancellation.o
 OBJS += config.o
 OBJS += console.o
@@ -9,3 +10,6 @@ OBJS += time.o
 OBJS += timer.o
 OBJS += util.o
 OBJS += vectors.o
+
+.PHONY: build_info.c
+build_info.o: CFLAGS += -DFW_VER="\"$(FW_VER)\""

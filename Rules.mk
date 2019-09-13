@@ -55,14 +55,17 @@ build.o: $(OBJS)
 %.elf: $(OBJS) %.ld Makefile
 	@echo LD $@
 	$(CC) $(LDFLAGS) -T$(*F).ld $(OBJS) -o $@
+	chmod a-x $@
 
 %.hex: %.elf
 	@echo OBJCOPY $@
 	$(OBJCOPY) -O ihex $< $@
+	chmod a-x $@
 
 %.bin: %.elf
 	@echo OBJCOPY $@
 	$(OBJCOPY) -O binary $< $@
+	chmod a-x $@
 
 clean:: $(addprefix _clean_,$(SUBDIRS))
 	rm -f *~ *.o *.elf *.hex *.bin *.ld $(DEPS)
