@@ -12,13 +12,30 @@
 /*
  * PIN ASSIGNMENTS:
  * 
- * A0,A1,A2: Rotary CLK,DAT,SEL
- * A9-10:    Serial Tx,Rx
- * A8:       CSYNC/HSYNC input
- * B6,7:     I2C CLK,DAT
- * B14:      VSYNC input
- * B15:      Display output (SPI2, MOSI)
- * C13:      Indicator LED (active low)
+ * Rotary Encoder:
+ *  A0: CLK
+ *  A1: DAT
+ *  A2: SEL
+ * 
+ * Serial Console:
+ *  A9: TX
+ *  A10: RX
+ * 
+ * I2C Interface (to Gotek):
+ *  B6: CLK
+ *  B7: DAT
+ * 
+ * Display:
+ *  A8: CSYNC or HSYNC
+ *  B14: VSYNC (only needed with HSYNC)
+ *  B15: Display output
+ * 
+ * Amiga keyboard:
+ *  B3: KBDAT
+ *  B4: KBCLK
+ * 
+ * Blue Pill Specifics:
+ *  C13: Indicator LED (active low)
  */
 
 #define gpio_csync gpioa
@@ -52,6 +69,13 @@ void IRQ_40(void) __attribute__((alias("IRQ_vsync"))); /* EXTI15_10 */
 #define dma_display_ch 5
 #define dma_display_irq 15
 void IRQ_15(void) __attribute__((alias("IRQ_display_dma_complete")));
+
+#define gpio_amikbd gpiob
+#define pin_amikbd_dat 3
+#define pin_amikbd_clk 4
+#define irq_amikbd_clk 10
+void IRQ_10(void) __attribute__((alias("IRQ_amikbd_clk"))); /* EXTI4 */
+
 
 int EXC_reset(void) __attribute__((alias("main")));
 
@@ -190,6 +214,32 @@ static void IRQ_display_dma_complete(void)
     dma1->ifcr = DMA_IFCR_CGIF(dma_display_ch);
 }
 
+#define AMI_L_CTRL 0x63
+#define AMI_L_ALT  0x64
+#define AMI_LEFT   0x4f
+#define AMI_RIGHT  0x4e
+#define AMI_UP     0x4c
+
+static time_t ami_time;
+static uint8_t ami_key, ami_bit;
+static uint8_t ami_keys[0x68];
+static void IRQ_amikbd_clk(void)
+{
+    time_t t = time_now();
+    int bit = gpio_read_pin(gpio_amikbd, pin_amikbd_dat);
+    exti->pr = m(pin_amikbd_clk);
+    if (time_diff(ami_time, t) > time_us(500))
+        ami_bit = 0;
+    ami_bit = (ami_bit + 1) & 7;
+    if (ami_bit == 0) {
+        ami_key = ~ami_key & 0x7f;
+        if (ami_key < sizeof(ami_keys))
+            ami_keys[ami_key] = bit;
+    }
+    ami_key = (ami_key << 1) | bit;
+    ami_time = t;
+}
+
 /* Set up a slave timer to be triggered by TIM1. */
 static void setup_slave_timer(TIM tim)
 {
@@ -211,14 +261,15 @@ void slave_arr_update(void)
 
 void set_polarity(void)
 {
-    exti->rtsr = exti->ftsr = 0;
     if (config.polarity) {
         /* Active High: Rising edge = sync start */
-        exti->rtsr = m(pin_csync) | m(pin_vsync); /* Rising edge */
+        exti->ftsr &= ~(m(pin_csync) | m(pin_vsync));
+        exti->rtsr |= m(pin_csync) | m(pin_vsync); /* Rising edge */
         tim1->ccer = TIM_CCER_CC1E | TIM_CCER_CC1P; /* Falling edge */
     } else {
         /* Active Low: Falling edge = sync start */
-        exti->ftsr = m(pin_csync) | m(pin_vsync); /* Falling edge */
+        exti->rtsr &= ~(m(pin_csync) | m(pin_vsync));
+        exti->ftsr |= m(pin_csync) | m(pin_vsync); /* Falling edge */
         tim1->ccer = TIM_CCER_CC1E; /* Rising edge */
     }
 }
@@ -305,6 +356,16 @@ int main(void)
     /* PC13 = LED */
     gpio_configure_pin(gpioc, 13, GPO_pushpull(_2MHz, HIGH));
 
+    /* PB3, PB4: Amiga Keyboard */
+    gpio_configure_pin(gpiob, 3, GPI_pull_up);
+    gpio_configure_pin(gpiob, 4, GPI_pull_up);
+    afio->exticr2 |= 0x0001; /* PB4 -> EXTI4 */
+    exti->ftsr |= m(pin_amikbd_clk);
+    exti->imr |= m(pin_amikbd_clk);
+    ami_time = time_now();
+    IRQx_set_prio(irq_amikbd_clk, SYNC_IRQ_PRI);
+    IRQx_enable(irq_amikbd_clk);
+
     /* Turn on the clocks. */
     rcc->apb1enr |= (RCC_APB1ENR_SPI2EN
                      | RCC_APB1ENR_TIM2EN
@@ -329,8 +390,8 @@ int main(void)
     IRQx_set_pending(dma_display_irq);
 
     /* PA8 -> EXTI8 ; PB14 -> EXTI14 */
-    afio->exticr4 = 0x0100;
-    exti->imr = m(pin_csync) | m(pin_vsync);
+    afio->exticr4 |= 0x0100;
+    exti->imr |= m(pin_csync) | m(pin_vsync);
     IRQx_set_prio(irq_csync, SYNC_IRQ_PRI);
     IRQx_set_prio(irq_vsync, SYNC_IRQ_PRI);
     IRQx_enable(irq_csync);
@@ -426,6 +487,12 @@ int main(void)
             b = buttons;
             buttons = 0;
             IRQ_restore(oldpri);
+            /* Fold in Amiga buttons */
+            if (ami_keys[AMI_L_CTRL] && ami_keys[AMI_L_ALT]) {
+                if (ami_keys[AMI_LEFT]) b |= B_LEFT;
+                if (ami_keys[AMI_RIGHT]) b |= B_RIGHT;
+                if (ami_keys[AMI_UP]) b |= B_SELECT;
+            }
             /* Pass button presses to config subsystem for processing. */
             config_process(b & ~B_PROCESSED);
         }

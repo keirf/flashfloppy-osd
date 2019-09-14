@@ -97,6 +97,36 @@ static void cnf_prt(int row, const char *format, ...)
     printk((row == 0) ? "\n%s%13s" : "\b\b\b\b\b\b\b\b\b\b\b\b%12s", r, "");
 }
 
+static struct repeat {
+    int repeat;
+    time_t prev;
+} left, right;
+
+uint8_t button_repeat(uint8_t pb, uint8_t b, uint8_t m, struct repeat *r)
+{
+    if (pb & m) {
+        /* Is this button held down? */
+        if (b & m) {
+            time_t delta = time_ms(r->repeat ? 100 : 500);
+            if (time_diff(r->prev, time_now()) > delta) {
+                /* Repeat this button now. */
+                r->repeat++;
+            } else {
+                /* Not ready to repeat this button. */
+                b &= ~m;
+            }
+        } else {
+            /* Button not pressed. Reset repeat count. */
+            r->repeat = 0;
+        }
+    }
+    if (b & m) {
+        /* Remember when we actioned this button press/repeat. */
+        r->prev = time_now();
+    }
+    return b;
+}
+
 void config_process(uint8_t b)
 {
     uint8_t _b;
@@ -104,7 +134,9 @@ void config_process(uint8_t b)
     bool_t changed = FALSE;
 
     _b = b;
-    b &= b ^ pb;
+    b &= b ^ (pb & B_SELECT);
+    b = button_repeat(pb, b, B_LEFT, &left);
+    b = button_repeat(pb, b, B_RIGHT, &right);
     pb = _b;
 
     if (usart1->sr & USART_SR_RXNE) {
