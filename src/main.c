@@ -70,16 +70,7 @@ void IRQ_40(void) __attribute__((alias("IRQ_vsync"))); /* EXTI15_10 */
 #define dma_display_irq 15
 void IRQ_15(void) __attribute__((alias("IRQ_display_dma_complete")));
 
-#define gpio_amikbd gpiob
-#define pin_amikbd_dat 3
-#define pin_amikbd_clk 4
-#define irq_amikbd_clk 10
-void IRQ_10(void) __attribute__((alias("IRQ_amikbd_clk"))); /* EXTI4 */
-
-
 int EXC_reset(void) __attribute__((alias("main")));
-
-#define m(bitnr) (1u<<(bitnr))
 
 #include "font.h"
 
@@ -214,32 +205,6 @@ static void IRQ_display_dma_complete(void)
     dma1->ifcr = DMA_IFCR_CGIF(dma_display_ch);
 }
 
-#define AMI_L_CTRL 0x63
-#define AMI_L_ALT  0x64
-#define AMI_LEFT   0x4f
-#define AMI_RIGHT  0x4e
-#define AMI_UP     0x4c
-
-static time_t ami_time;
-static uint8_t ami_key, ami_bit;
-static uint8_t ami_keys[0x68];
-static void IRQ_amikbd_clk(void)
-{
-    time_t t = time_now();
-    int bit = gpio_read_pin(gpio_amikbd, pin_amikbd_dat);
-    exti->pr = m(pin_amikbd_clk);
-    if (time_diff(ami_time, t) > time_us(500))
-        ami_bit = 0;
-    ami_bit = (ami_bit + 1) & 7;
-    if (ami_bit == 0) {
-        ami_key = ~ami_key & 0x7f;
-        if (ami_key < sizeof(ami_keys))
-            ami_keys[ami_key] = bit;
-    }
-    ami_key = (ami_key << 1) | bit;
-    ami_time = t;
-}
-
 /* Set up a slave timer to be triggered by TIM1. */
 static void setup_slave_timer(TIM tim)
 {
@@ -339,6 +304,7 @@ int main(void)
     time_init();
     console_init();
     lcd_init();
+    amiga_init();
 
     /* PA0, PA1, PA2: Rotary encoder */
     for (i = 0; i < 3; i++)
@@ -355,16 +321,6 @@ int main(void)
 
     /* PC13 = LED */
     gpio_configure_pin(gpioc, 13, GPO_pushpull(_2MHz, HIGH));
-
-    /* PB3, PB4: Amiga Keyboard */
-    gpio_configure_pin(gpiob, 3, GPI_pull_up);
-    gpio_configure_pin(gpiob, 4, GPI_pull_up);
-    afio->exticr2 |= 0x0001; /* PB4 -> EXTI4 */
-    exti->ftsr |= m(pin_amikbd_clk);
-    exti->imr |= m(pin_amikbd_clk);
-    ami_time = time_now();
-    IRQx_set_prio(irq_amikbd_clk, SYNC_IRQ_PRI);
-    IRQx_enable(irq_amikbd_clk);
 
     /* Turn on the clocks. */
     rcc->apb1enr |= (RCC_APB1ENR_SPI2EN
@@ -488,10 +444,10 @@ int main(void)
             buttons = 0;
             IRQ_restore(oldpri);
             /* Fold in Amiga buttons */
-            if (ami_keys[AMI_L_CTRL] && ami_keys[AMI_L_ALT]) {
-                if (ami_keys[AMI_LEFT]) b |= B_LEFT;
-                if (ami_keys[AMI_RIGHT]) b |= B_RIGHT;
-                if (ami_keys[AMI_UP]) b |= B_SELECT;
+            if (amiga_keymap[AMI_L_CTRL] && amiga_keymap[AMI_L_ALT]) {
+                if (amiga_keymap[AMI_LEFT]) b |= B_LEFT;
+                if (amiga_keymap[AMI_RIGHT]) b |= B_RIGHT;
+                if (amiga_keymap[AMI_UP]) b |= B_SELECT;
             }
             /* Pass button presses to config subsystem for processing. */
             config_process(b & ~B_PROCESSED);

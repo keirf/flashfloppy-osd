@@ -1,3 +1,4 @@
+OBJS += amiga.o
 OBJS += build_info.o
 OBJS += cancellation.o
 OBJS += config.o
