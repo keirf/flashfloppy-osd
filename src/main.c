@@ -300,6 +300,23 @@ static void render_line(unsigned int y, const struct display *display)
     }
 }
 
+/* We snapshot the relevant Amiga keys so that we can scan the keymap (and 
+ * clear the sticky bits) in one place in the main loop. */
+static uint8_t keys;
+#define K_LEFT  1
+#define K_RIGHT 2
+#define K_UP    4
+#define K_HELP  8
+
+static void update_amiga_keys(void)
+{
+    keys = 0;
+    if (amiga_key_pressed(AMI_LEFT)) keys |= K_LEFT;
+    if (amiga_key_pressed(AMI_RIGHT)) keys |= K_RIGHT;
+    if (amiga_key_pressed(AMI_UP)) keys |= K_UP;
+    if (amiga_key_pressed(AMI_HELP)) keys |= K_HELP;
+}
+
 struct gotek_button {
     bool_t pressed;
     time_t t;
@@ -309,7 +326,7 @@ static bool_t gotek_active;
 static void emulate_gotek_button(
     uint8_t keycode, struct gotek_button *button, int pin)
 {
-    bool_t pressed = amiga_key_pressed(keycode) && gotek_active;
+    bool_t pressed = (keys & keycode) && gotek_active;
     if (!(pressed ^ button->pressed))
         return; /* no change */
     if (pressed) {
@@ -326,11 +343,11 @@ static void emulate_gotek_buttons(void)
 {
     if (config_active)
         gotek_active = FALSE;
-    else if (!gotek_active && !amiga_key_pressed(AMI_UP))
-        gotek_active = TRUE; /* only after select key is released */
-    emulate_gotek_button(AMI_LEFT, &gl, 13);
-    emulate_gotek_button(AMI_RIGHT, &gr, 14);
-    emulate_gotek_button(AMI_UP, &gs, 15);
+    else if (!gotek_active && !keys)
+        gotek_active = TRUE; /* only after keys are released */
+    emulate_gotek_button(K_LEFT, &gl, 13);
+    emulate_gotek_button(K_RIGHT, &gr, 14);
+    emulate_gotek_button(K_UP, &gs, 15);
 }
 
 int main(void)
@@ -483,6 +500,7 @@ int main(void)
                 render_line(i, cur_display);
         }
 
+        update_amiga_keys();
         emulate_gotek_buttons();
 
         if (buttons) {
@@ -493,13 +511,13 @@ int main(void)
             b = buttons;
             buttons = 0;
             IRQ_restore(oldpri);
-            /* Fold in Amiga buttons */
+            /* Fold in keyboard presses. */
             if (config_active) {
-                if (amiga_key_pressed_now(AMI_LEFT)) b |= B_LEFT;
-                if (amiga_key_pressed_now(AMI_RIGHT)) b |= B_RIGHT;
-                if (amiga_key_pressed_now(AMI_UP)) b |= B_SELECT;
+                if (keys & K_LEFT) b |= B_LEFT;
+                if (keys & K_RIGHT) b |= B_RIGHT;
+                if (keys & K_UP) b |= B_SELECT;
             } else {
-                if (amiga_key_pressed_now(AMI_HELP)) b |= B_SELECT;
+                if (keys & K_HELP) b |= B_SELECT;
             }
             /* Pass button presses to config subsystem for processing. */
             config_process(b & ~B_PROCESSED);
