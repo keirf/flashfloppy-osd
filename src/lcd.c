@@ -46,8 +46,7 @@ struct display lcd_display;
  *  Arbitration lost (ARLO): Peripheral automatically recovers */
 static void IRQ_i2c_error(void)
 {
-    /* Dump and clear I2C errors. Nothing else needs to be done. */
-    printk("I2C: Error (%04x)\n", (uint16_t)(i2c->sr1 & I2C_SR1_ERRORS));
+    /* Clear I2C errors. Nothing else needs to be done. */
     i2c->sr1 &= ~I2C_SR1_ERRORS;
 }
 

@@ -68,7 +68,6 @@ static void IRQ_amikbd_clk(void)
                 keymap[keycode] &= 2;
         }
         handshake();
-//        printk("[%02x,%u]", keycode, bit);
     }
 
     keycode = (keycode << 1) | bit;

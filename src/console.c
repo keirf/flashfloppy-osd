@@ -71,8 +71,9 @@ int vprintk(const char *format, va_list ap)
     static char str[128];
     char *p, c;
     int n;
+    uint32_t oldpri;
 
-    IRQ_global_disable();
+    oldpri = IRQ_save(TIMER_IRQ_PRI);
 
     n = vsnprintf(str, sizeof(str), format, ap);
 
@@ -92,7 +93,7 @@ int vprintk(const char *format, va_list ap)
 
     kick_tx();
 
-    IRQ_global_enable();
+    IRQ_restore(oldpri);
 
     return n;
 }
