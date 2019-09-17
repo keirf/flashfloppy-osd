@@ -174,10 +174,8 @@ void config_process(uint8_t b)
             cnf_prt(0, "Sync:");
         if (b & (B_LEFT|B_RIGHT))
             config.polarity ^= 1;
-        if (b) {
+        if (b)
             cnf_prt(1, "Active %s", config.polarity ? "HIGH" : "LOW");
-            set_polarity();
-        }
         break;
     case C_h_off:
         if (changed)

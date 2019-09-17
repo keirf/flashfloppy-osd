@@ -143,22 +143,33 @@ static void IRQ_csync(void)
 
     if (hline <= 0) { /* EOF or VBL */
 
-        /* Measure sync pulse: Normal Sync ~= 5us, Porch+Data ~= 59us */
+        static time_t p;
         time_t t = time_now();
-        while (gpio_read_pin(gpio_csync, pin_csync) == config.polarity) {
-            if (time_diff(t, time_now()) < time_us(10))
-                continue;
+
+        /* Trigger on both sync edges so we can measure sync pulse width: 
+         * Normal Sync ~= 5us, Porch+Data ~= 59us */
+        exti->ftsr |= m(pin_csync) | m(pin_vsync);
+        exti->rtsr |= m(pin_csync) | m(pin_vsync);
+
+        if (gpio_read_pin(gpio_csync, pin_csync) == config.polarity) {
+
+            /* Sync pulse start: remember the current time. */
+            p = t;
+
+        } else if (time_diff(p, t) > time_us(10)) {
+
             /* Long sync: We are in vblank. */
             hline = HLINE_VBL;
-            return;
-        }
 
-        /* Short sync: We are outside the vblank period. Start frame if we were 
-         * previously in vblank. */
-        if (hline == HLINE_VBL) {
+        } else if (hline == HLINE_VBL) {
+
+            /* Short sync: We are outside the vblank period. Start frame (we
+             * were previously in vblank). */
             if (!cur_display->on)
                 goto eof;
             hline = HLINE_SOF;
+            set_polarity();
+
         }
 
     } else if (++hline == config.v_off) {
