@@ -80,6 +80,7 @@ static enum {
     C_rows,
     C_min_cols,
     C_max_cols,
+    C_save,
     C_max
 } config_state;
 
@@ -94,7 +95,7 @@ static void cnf_prt(int row, const char *format, ...)
     (void)vsnprintf(r, 20, format, ap);
     va_end(ap);
 
-    printk((row == 0) ? "\n%s%13s" : "\b\b\b\b\b\b\b\b\b\b\b\b%12s", r, "");
+    printk((row == 0) ? "\n%s%14s" : "\b\b\b\b\b\b\b\b\b\b\b\b\b%13s", r, "");
 }
 
 static struct repeat {
@@ -132,6 +133,8 @@ void config_process(uint8_t b)
     uint8_t _b;
     static uint8_t pb;
     bool_t changed = FALSE;
+    static enum { C_SAVE = 0, C_USE, C_DISCARD, C_RESET } new_config;
+    static struct config old_config;
 
     _b = b;
     b &= b ^ (pb & B_SELECT);
@@ -151,7 +154,22 @@ void config_process(uint8_t b)
     if (b & B_SELECT) {
         if (++config_state >= C_max) {
             config_state = C_idle;
-            config_write_flash(&config);
+            switch (new_config) {
+            case C_SAVE:
+                config_write_flash(&config);
+                break;
+            case C_USE:
+                break;
+            case C_DISCARD:
+                config = old_config;
+                slave_arr_update();
+                break;
+            case C_RESET:
+                config = dfl_config;
+                slave_arr_update();
+                config_write_flash(&config);
+                break;
+            }
             printk("\n");
             config_printk(&config);
             lcd_display_update();
@@ -167,6 +185,7 @@ void config_process(uint8_t b)
         if (changed) {
             cnf_prt(0, "FF OSD v%s", fw_ver);
             cnf_prt(1, "Flash Config");
+            old_config = config;
         }
         break;
     case C_polarity:
@@ -234,6 +253,21 @@ void config_process(uint8_t b)
         if (b)
             cnf_prt(1, "%u", config.max_cols);
         break;
+    case C_save: {
+        const static char *str[] = { "Save", "Use",
+                                     "Discard", "Factory Reset" };
+        if (changed) {
+            cnf_prt(0, "Save New Config?");
+            new_config = C_SAVE;
+        }
+        if (b & B_LEFT)
+            new_config = (new_config - 1) & 3;
+        if (b & B_RIGHT)
+            new_config = (new_config + 1) & 3;
+        if (b)
+            cnf_prt(1, "%s", str[new_config]);
+        break;
+    }
     }
 }
 
