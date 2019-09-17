@@ -76,7 +76,7 @@ int printk(const char *format, ...)
 #define htobe32(x) _rev32(x)
 
 /* Amiga keyboard */
-#define AMI_HELP   0x5f
+#define AMI_F1     0x50
 #define AMI_L_CTRL 0x63
 #define AMI_L_ALT  0x64
 #define AMI_LEFT   0x4f

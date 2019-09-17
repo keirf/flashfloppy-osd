@@ -303,18 +303,18 @@ static void render_line(unsigned int y, const struct display *display)
 /* We snapshot the relevant Amiga keys so that we can scan the keymap (and 
  * clear the sticky bits) in one place in the main loop. */
 static uint8_t keys;
-#define K_LEFT  1
-#define K_RIGHT 2
-#define K_UP    4
-#define K_HELP  8
+#define K_LEFT   B_LEFT
+#define K_RIGHT  B_RIGHT
+#define K_SELECT B_SELECT
+#define K_MENU   8
 
 static void update_amiga_keys(void)
 {
     keys = 0;
     if (amiga_key_pressed(AMI_LEFT)) keys |= K_LEFT;
     if (amiga_key_pressed(AMI_RIGHT)) keys |= K_RIGHT;
-    if (amiga_key_pressed(AMI_UP)) keys |= K_UP;
-    if (amiga_key_pressed(AMI_HELP)) keys |= K_HELP;
+    if (amiga_key_pressed(AMI_UP)) keys |= K_SELECT;
+    if (amiga_key_pressed(AMI_F1)) keys |= K_MENU;
 }
 
 struct gotek_button {
@@ -347,7 +347,7 @@ static void emulate_gotek_buttons(void)
         gotek_active = TRUE; /* only after keys are released */
     emulate_gotek_button(K_LEFT, &gl, 13);
     emulate_gotek_button(K_RIGHT, &gr, 14);
-    emulate_gotek_button(K_UP, &gs, 15);
+    emulate_gotek_button(K_SELECT, &gs, 15);
 }
 
 int main(void)
@@ -513,11 +513,9 @@ int main(void)
             IRQ_restore(oldpri);
             /* Fold in keyboard presses. */
             if (config_active) {
-                if (keys & K_LEFT) b |= B_LEFT;
-                if (keys & K_RIGHT) b |= B_RIGHT;
-                if (keys & K_UP) b |= B_SELECT;
+                b |= keys & (B_LEFT | B_RIGHT | B_SELECT);
             } else {
-                if (keys & K_HELP) b |= B_SELECT;
+                if (keys & K_MENU) b |= B_SELECT;
             }
             /* Pass button presses to config subsystem for processing. */
             config_process(b & ~B_PROCESSED);

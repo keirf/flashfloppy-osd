@@ -60,7 +60,7 @@ void config_init(void)
 
     config_printk(&config);
 
-    printk("\nKeys:\n Space: Select\n P: Up\n L: Down\n");
+    printk("\nKeys:\n Space: Select\n O: Down\n P: Up\n");
 
     lcd_display_update();
     (void)usart1->dr;
@@ -147,7 +147,7 @@ void config_process(uint8_t b)
         switch (tolower(c)) {
         case ' ': b |= B_SELECT; break;
         case 'p': b |= B_RIGHT; break;
-        case 'l': b |= B_LEFT; break;
+        case 'o': b |= B_LEFT; break;
         }
     }
 
