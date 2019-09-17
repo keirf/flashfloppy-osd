@@ -17,8 +17,9 @@
 #define gpio_amikbd gpiob
 #define pin_amikbd_dat 3
 #define pin_amikbd_clk 4
-#define irq_amikbd_clk 10
-void IRQ_10(void) __attribute__((alias("IRQ_amikbd_clk"))); /* EXTI4 */
+
+#define irq_tim3 29
+void IRQ_29(void) __attribute__((alias("IRQ_amikbd_clk")));
 
 static uint8_t keymap[0x68];
 
@@ -41,7 +42,7 @@ static void IRQ_amikbd_clk(void)
     static time_t timestamp;
     static int resync;
 
-    exti->pr = m(pin_amikbd_clk);
+    (void)tim3->ccr1; /* clear irq */
 
     /* Sync to keycode start by observing delay in comms. */
     if ((time_diff(timestamp, t) > time_ms(1)) && (bitpos != 0)) {
@@ -93,13 +94,16 @@ void amiga_init(void)
     gpio_configure_pin(gpio_amikbd, pin_amikbd_dat, GPI_pull_up);
     gpio_configure_pin(gpio_amikbd, 4, GPI_pull_up);
 
-    /* Interrupts on falling edge of PB4 (via EXTI4). */
-    afio->exticr2 |= 0x0001; /* PB4 -> EXTI4 */
-    exti->rtsr |= m(pin_amikbd_clk); /* Data clocked in on the rising edge */
-    exti->imr |= m(pin_amikbd_clk);
+    /* We map PB4 (KBCLK) to TIM3,CH1 and use its input filter and edge 
+     * detector to generate interrupts on clock transitions. */
+    afio->mapr |= AFIO_MAPR_TIM3_REMAP_PARTIAL;
+    /* f_sampling = 72MHz/8 = 9MHz, N=8 -> must be stable for 889us. */
+    tim3->ccmr1 = TIM_CCMR1_CC1S(TIM_CCS_INPUT_TI1) | TIM_CCMR1_IC1F(9);
+    tim3->ccer = TIM_CCER_CC1E; /* Rising edge */
+    tim3->dier |= TIM_DIER_CC1IE;
 
-    IRQx_set_prio(irq_amikbd_clk, AMIKBD_IRQ_PRI);
-    IRQx_enable(irq_amikbd_clk);
+    IRQx_set_prio(irq_tim3, AMIKBD_IRQ_PRI);
+    IRQx_enable(irq_tim3);
 }
 
 /*

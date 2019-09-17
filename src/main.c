@@ -367,7 +367,6 @@ int main(void)
     time_init();
     console_init();
     lcd_init();
-    amiga_init();
 
     /* PA0, PA1, PA2: Rotary encoder */
     for (i = 0; i < 3; i++)
@@ -457,6 +456,8 @@ int main(void)
 
     slave_arr_update();
     set_polarity();
+
+    amiga_init();
 
     rotary = (gpioc->idr >> 10) & 3;
     timer_init(&button_timer, button_timer_fn, NULL);
