@@ -76,12 +76,14 @@ int printk(const char *format, ...)
 #define htobe32(x) _rev32(x)
 
 /* Amiga keyboard */
+#define AMI_HELP   0x5f
 #define AMI_L_CTRL 0x63
 #define AMI_L_ALT  0x64
 #define AMI_LEFT   0x4f
 #define AMI_RIGHT  0x4e
 #define AMI_UP     0x4c
-extern uint8_t amiga_keymap[];
+bool_t amiga_key_pressed(uint8_t keycode);
+#define amiga_key_pressed_now(k) (amiga_key_pressed(k) & 1)
 void amiga_init(void);
 
 /* Button codes */
@@ -134,10 +136,10 @@ extern uint32_t _thread_stacktop[], _thread_stackbottom[];
 extern uint32_t _irq_stacktop[], _irq_stackbottom[];
 
 /* IRQ priorities, 0 (highest) to 15 (lowest). */
-#define AMIKBD_IRQ_PRI        1
 #define SYNC_IRQ_PRI          2
 #define DISPLAY_IRQ_PRI       3
 #define I2C_IRQ_PRI           4
+#define AMIKBD_IRQ_PRI        5
 #define TIMER_IRQ_PRI         8
 #define CONSOLE_IRQ_PRI      14
 

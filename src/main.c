@@ -25,6 +25,11 @@
  *  B6: CLK
  *  B7: DAT
  * 
+ * Buttons (Gotek):
+ *  C13: PREV/LEFT/DOWN
+ *  C14: NEXT/RIGHT/UP
+ *  C15: SELECT/EJECT
+ * 
  * Display:
  *  A8: CSYNC or HSYNC
  *  B14: VSYNC (only needed with HSYNC)
@@ -33,9 +38,6 @@
  * Amiga keyboard:
  *  B3: KBDAT
  *  B4: KBCLK
- * 
- * Blue Pill Specifics:
- *  C13: Indicator LED (active low)
  */
 
 #define gpio_csync gpioa
@@ -144,7 +146,7 @@ static void IRQ_csync(void)
         /* Measure sync pulse: Normal Sync ~= 5us, Porch+Data ~= 59us */
         time_t t = time_now();
         while (gpio_read_pin(gpio_csync, pin_csync) == config.polarity) {
-            if (time_diff(t, time_now()) < time_us(20))
+            if (time_diff(t, time_now()) < time_us(10))
                 continue;
             /* Long sync: We are in vblank. */
             hline = HLINE_VBL;
@@ -287,6 +289,39 @@ static void render_line(unsigned int y, const struct display *display)
     }
 }
 
+struct gotek_button {
+    bool_t pressed;
+    time_t t;
+} gl, gr, gs;
+
+static bool_t gotek_active;
+static void emulate_gotek_button(
+    uint8_t keycode, struct gotek_button *button, int pin)
+{
+    bool_t pressed = amiga_key_pressed(keycode) && gotek_active;
+    if (!(pressed ^ button->pressed))
+        return; /* no change */
+    if (pressed) {
+        button->t = time_now();
+        button->pressed = TRUE;
+        gpio_write_pin(gpioc, pin, LOW);
+    } else if (time_diff(button->t, time_now()) > time_ms(200)) {
+        button->pressed = FALSE;
+        gpio_write_pin(gpioc, pin, HIGH);
+    }
+}
+
+static void emulate_gotek_buttons(void)
+{
+    if (config_active)
+        gotek_active = FALSE;
+    else if (!gotek_active && !amiga_key_pressed(AMI_UP))
+        gotek_active = TRUE; /* only after select key is released */
+    emulate_gotek_button(AMI_LEFT, &gl, 13);
+    emulate_gotek_button(AMI_RIGHT, &gr, 14);
+    emulate_gotek_button(AMI_UP, &gs, 15);
+}
+
 int main(void)
 {
     int i;
@@ -319,8 +354,10 @@ int main(void)
     /* PB15 = Colour output */
     gpio_configure_pin(gpio_display, pin_display, GPI_floating);
 
-    /* PC13 = LED */
-    gpio_configure_pin(gpioc, 13, GPO_pushpull(_2MHz, HIGH));
+    /* PC13,14,15: Gotek buttons */
+    gpio_configure_pin(gpioc, 13, GPO_opendrain(_2MHz, HIGH));
+    gpio_configure_pin(gpioc, 14, GPO_opendrain(_2MHz, HIGH));
+    gpio_configure_pin(gpioc, 15, GPO_opendrain(_2MHz, HIGH));
 
     /* Turn on the clocks. */
     rcc->apb1enr |= (RCC_APB1ENR_SPI2EN
@@ -435,6 +472,8 @@ int main(void)
                 render_line(i, cur_display);
         }
 
+        emulate_gotek_buttons();
+
         if (buttons) {
             /* Atomically snapshot and clear the button state. */
             uint8_t b;
@@ -444,10 +483,12 @@ int main(void)
             buttons = 0;
             IRQ_restore(oldpri);
             /* Fold in Amiga buttons */
-            if (amiga_keymap[AMI_L_CTRL] && amiga_keymap[AMI_L_ALT]) {
-                if (amiga_keymap[AMI_LEFT]) b |= B_LEFT;
-                if (amiga_keymap[AMI_RIGHT]) b |= B_RIGHT;
-                if (amiga_keymap[AMI_UP]) b |= B_SELECT;
+            if (config_active) {
+                if (amiga_key_pressed_now(AMI_LEFT)) b |= B_LEFT;
+                if (amiga_key_pressed_now(AMI_RIGHT)) b |= B_RIGHT;
+                if (amiga_key_pressed_now(AMI_UP)) b |= B_SELECT;
+            } else {
+                if (amiga_key_pressed_now(AMI_HELP)) b |= B_SELECT;
             }
             /* Pass button presses to config subsystem for processing. */
             config_process(b & ~B_PROCESSED);

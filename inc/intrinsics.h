@@ -96,6 +96,64 @@ static inline uint32_t _rbit32(uint32_t x)
     return result;
 }
 
+extern void __bad_cmpxchg(volatile void *ptr, int size);
+
+static always_inline unsigned long __cmpxchg(
+    volatile void *ptr, unsigned long old, unsigned long new, int size)
+{
+    unsigned long oldval, res;
+
+    switch (size) {
+    case 1:
+        do {
+            asm volatile("    ldrexb %1,[%2]      \n"
+                         "    movs   %0,#0        \n"
+                         "    cmp    %1,%3        \n"
+                         "    it     eq           \n"
+                         "    strexbeq %0,%4,[%2] \n"
+                         : "=&r" (res), "=&r" (oldval)
+                         : "r" (ptr), "Ir" (old), "r" (new)
+                         : "memory", "cc");
+        } while (res);
+        break;
+    case 2:
+        do {
+            asm volatile("    ldrexh %1,[%2]      \n"
+                         "    movs   %0,#0        \n"
+                         "    cmp    %1,%3        \n"
+                         "    it     eq           \n"
+                         "    strexheq %0,%4,[%2] \n"
+                         : "=&r" (res), "=&r" (oldval)
+                         : "r" (ptr), "Ir" (old), "r" (new)
+                         : "memory", "cc");
+        } while (res);
+        break;
+    case 4:
+        do {
+            asm volatile("    ldrex  %1,[%2]      \n"
+                         "    movs   %0,#0        \n"
+                         "    cmp    %1,%3        \n"
+                         "    it     eq           \n"
+                         "    strexeq %0,%4,[%2]  \n"
+                         : "=&r" (res), "=&r" (oldval)
+                         : "r" (ptr), "Ir" (old), "r" (new)
+                         : "memory", "cc");
+        } while (res);
+        break;
+    default:
+        __bad_cmpxchg(ptr, size);
+        oldval = 0;
+    }
+
+    return oldval;
+}
+
+#define cmpxchg(ptr,o,n)                                \
+    ((__typeof__(*(ptr)))__cmpxchg((ptr),               \
+                                   (unsigned long)(o),  \
+                                   (unsigned long)(n),  \
+                                   sizeof(*(ptr))))
+
 /*
  * Local variables:
  * mode: C
