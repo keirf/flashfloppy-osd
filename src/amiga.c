@@ -25,8 +25,15 @@ static uint8_t keymap[0x68];
 
 static void handshake(void)
 {
+    time_t t = time_now();
+
+    /* Wait for rising edge. */
+    while ((time_diff(t, time_now()) < time_us(40))
+           && !gpio_read_pin(gpio_amikbd, pin_amikbd_clk))
+        continue;
+
     /* Allow time for CIA to clock the bit. */
-    delay_us(3);
+    delay_us(5);
 
     /* Force handshake. 100us is plenty long enough. */
     gpio_configure_pin(gpio_amikbd, pin_amikbd_dat, GPO_opendrain(_2MHz, LOW));
@@ -42,7 +49,8 @@ static void IRQ_amikbd_clk(void)
     static time_t timestamp;
     static int resync;
 
-    (void)tim3->ccr1; /* clear irq */
+    /* Clear the irq line. */
+    (void)tim3->ccr1;
 
     /* Sync to keycode start by observing delay in comms. */
     if ((time_diff(timestamp, t) > time_ms(1)) && (bitpos != 0)) {
@@ -58,20 +66,30 @@ static void IRQ_amikbd_clk(void)
 
     timestamp = t;
     bitpos = (bitpos + 1) & 7;
+    keycode = (keycode << 1) | bit;
 
-    if (bitpos == 0) {
-        /* Received full byte. Decode and update the keymap. */
-        keycode = ~keycode & 0x7f;
-        if (keycode < sizeof(keymap)) {
-            if (bit)
-                keymap[keycode] = 3;
-            else
-                keymap[keycode] &= 2;
-        }
-        handshake();
+    /* Bail if we have not yet received a full byte. */
+    if (bitpos != 0)
+        return;
+
+    /* Forcibly filter out key presses modified by L.Ctrl + L.Alt: We force
+     * them to be viewed as key-release events by blatting KBDAT. */
+    if (bit && (keymap[AMI_L_CTRL] & 1) && (keymap[AMI_L_ALT] & 1)) {
+        gpio_configure_pin(gpio_amikbd, pin_amikbd_dat,
+                           GPO_opendrain(_2MHz, LOW));
     }
 
-    keycode = (keycode << 1) | bit;
+    /* Decode the keycode and update the keymap. */
+    keycode = ~(keycode >> 1) & 0x7f;
+    if (keycode < sizeof(keymap)) {
+        if (bit)
+            keymap[keycode] = 3;
+        else
+            keymap[keycode] &= 2;
+    }
+
+    /* Acknowledge the byte (some games and demos have no keyboard handler). */
+    handshake();
 }
 
 bool_t amiga_key_pressed(uint8_t keycode)
@@ -99,7 +117,7 @@ void amiga_init(void)
     afio->mapr |= AFIO_MAPR_TIM3_REMAP_PARTIAL;
     /* f_sampling = 72MHz/8 = 9MHz, N=8 -> must be stable for 889us. */
     tim3->ccmr1 = TIM_CCMR1_CC1S(TIM_CCS_INPUT_TI1) | TIM_CCMR1_IC1F(9);
-    tim3->ccer = TIM_CCER_CC1E; /* Rising edge */
+    tim3->ccer = TIM_CCER_CC1E | TIM_CCER_CC1P; /* Falling edge */
     tim3->dier |= TIM_DIER_CC1IE;
 
     IRQx_set_prio(irq_tim3, AMIKBD_IRQ_PRI);
