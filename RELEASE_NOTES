@@ -1,0 +1,15 @@
+************************************
+** FF OSD Release Notes
+** Keir Fraser <keir.xen@gmail.com>
+************************************
+
+** v1.1 - 17 September 2019
+ - Support Amiga keyboard for configuration and Gotek button presses
+   - L.Alt + L.Ctrl must be held to enable the following magic keys
+     - Left Arrow: Down/Left; Right Arrow: Up/Right; Up Arrow: Select
+     - F1: Enter the FF OSD configuration menu
+ - Configuration: Add a Save/Use/Discard/Reset selector
+ - Sync IRQ: Avoid spin-waiting in this high-priority interrupt
+
+** v1.0 - 13 September 2019
+** Initial release
