@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.2 - 20 September 2019
+ - Move Gotek button outputs from C13-15 to A3-5
+   - C13-15 are weak outputs
+   - C13-15 are in use (LED, crystal) on many "Pill" boards
+   - C13-15 not available at a header on some "Pill" boards
+
 ** v1.1 - 17 September 2019
  - Support Amiga keyboard for configuration and Gotek button presses
    - L.Alt + L.Ctrl must be held to enable the following magic keys
