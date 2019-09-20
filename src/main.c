@@ -26,9 +26,9 @@
  *  B7: DAT
  * 
  * Buttons (Gotek):
- *  C13: PREV/LEFT/DOWN
- *  C14: NEXT/RIGHT/UP
- *  C15: SELECT/EJECT
+ *  A3: PREV/LEFT/DOWN
+ *  A4: NEXT/RIGHT/UP
+ *  A5: SELECT/EJECT
  * 
  * Display:
  *  A8: CSYNC or HSYNC
@@ -332,10 +332,10 @@ static void emulate_gotek_button(
     if (pressed) {
         button->t = time_now();
         button->pressed = TRUE;
-        gpio_write_pin(gpioc, pin, LOW);
+        gpio_write_pin(gpioa, pin, LOW);
     } else if (time_diff(button->t, time_now()) > time_ms(200)) {
         button->pressed = FALSE;
-        gpio_write_pin(gpioc, pin, HIGH);
+        gpio_write_pin(gpioa, pin, HIGH);
     }
 }
 
@@ -345,9 +345,9 @@ static void emulate_gotek_buttons(void)
         gotek_active = FALSE;
     else if (!gotek_active && !keys)
         gotek_active = TRUE; /* only after keys are released */
-    emulate_gotek_button(K_LEFT, &gl, 13);
-    emulate_gotek_button(K_RIGHT, &gr, 14);
-    emulate_gotek_button(K_SELECT, &gs, 15);
+    emulate_gotek_button(K_LEFT, &gl, 3);
+    emulate_gotek_button(K_RIGHT, &gr, 4);
+    emulate_gotek_button(K_SELECT, &gs, 5);
 }
 
 int main(void)
@@ -368,6 +368,9 @@ int main(void)
     console_init();
     lcd_init();
 
+    /* PC13: Blue Pill Indicator LED (Active Low) */
+    gpio_configure_pin(gpioc, 13, GPI_pull_up);
+
     /* PA0, PA1, PA2: Rotary encoder */
     for (i = 0; i < 3; i++)
         gpio_configure_pin(gpioa, i, GPI_pull_up);
@@ -381,10 +384,10 @@ int main(void)
     /* PB15 = Colour output */
     gpio_configure_pin(gpio_display, pin_display, GPI_floating);
 
-    /* PC13,14,15: Gotek buttons */
-    gpio_configure_pin(gpioc, 13, GPO_opendrain(_2MHz, HIGH));
-    gpio_configure_pin(gpioc, 14, GPO_opendrain(_2MHz, HIGH));
-    gpio_configure_pin(gpioc, 15, GPO_opendrain(_2MHz, HIGH));
+    /* PA3,4,5: Gotek buttons */
+    gpio_configure_pin(gpioa, 3, GPO_opendrain(_2MHz, HIGH));
+    gpio_configure_pin(gpioa, 4, GPO_opendrain(_2MHz, HIGH));
+    gpio_configure_pin(gpioa, 5, GPO_opendrain(_2MHz, HIGH));
 
     /* Turn on the clocks. */
     rcc->apb1enr |= (RCC_APB1ENR_SPI2EN
@@ -459,7 +462,7 @@ int main(void)
 
     amiga_init();
 
-    rotary = (gpioc->idr >> 10) & 3;
+    rotary = gpioa->idr & 3;
     timer_init(&button_timer, button_timer_fn, NULL);
     timer_set(&button_timer, time_now());
 
