@@ -1,21 +1,12 @@
 ENTRY(vector_table)
 
-#if 1
 MEMORY
 {
-  FLASH (rx)      : ORIGIN = 0x08000000, LENGTH = 64K
+  FLASH (rx)      : ORIGIN = 0x08000000, LENGTH = 63K
   RAM (rwx)       : ORIGIN = 0x20000000, LENGTH = 20K
 }
 REGION_ALIAS("RO", FLASH);
 REGION_ALIAS("RW", RAM);
-#else
-MEMORY
-{
-  RAM (rwx)       : ORIGIN = 0x20001000, LENGTH = 48K
-}
-REGION_ALIAS("RO", RAM);
-REGION_ALIAS("RW", RAM);
-#endif
 
 SECTIONS
 {

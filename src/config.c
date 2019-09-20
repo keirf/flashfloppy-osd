@@ -9,7 +9,7 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-const static struct config *flash_config = (struct config *)0x08007c00;
+const static struct config *flash_config = (struct config *)0x0800fc00;
 const static struct config dfl_config = {
     .polarity = FALSE,
     .h_off = 42,
