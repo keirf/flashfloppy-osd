@@ -23,7 +23,6 @@
 #define i2c i2c1
 #define SCL 6
 #define SDA 7
-#define dma_i2c (dma1->ch7)
 
 /* I2C error ISR. */
 #define I2C_ERROR_IRQ 32
@@ -33,9 +32,9 @@ void IRQ_32(void) __attribute__((alias("IRQ_i2c_error")));
 #define I2C_EVENT_IRQ 31
 void IRQ_31(void) __attribute__((alias("IRQ_i2c_event")));
 
-/* I2C data buffer. Data is DMAed to the I2C peripheral. */
-static uint8_t dma_buf[1024] __aligned(4);
-static uint16_t dma_cons;
+/* I2C data ring. */
+static uint8_t ring[1024];
+static uint16_t ring_cons, ring_prod;
 
 static bool_t lcd_inc;
 static uint8_t lcd_ddraddr;
@@ -62,6 +61,12 @@ static void IRQ_i2c_event(void)
     if (sr1 & I2C_SR1_STOPF) {
         /* Write CR1 clears SR1_STOPF. */
         i2c->cr1 = I2C_CR1_ACK | I2C_CR1_PE;
+    }
+
+    if (sr1 & I2C_SR1_RXNE) {
+        /* Read DR clear SR1_RXNE. */
+        ring[ring_prod] = i2c->dr;
+        ring_prod = (ring_prod + 1) & (ARRAY_SIZE(ring) - 1);
     }
 }
 
@@ -124,17 +129,14 @@ static void process_dat(uint8_t dat)
 
 void lcd_process(void)
 {
-    const uint16_t buf_mask = ARRAY_SIZE(dma_buf) - 1;
-    uint16_t cons, prod;
+    const uint16_t buf_mask = ARRAY_SIZE(ring) - 1;
+    uint16_t c, p = ring_prod;
     static uint16_t dat = 1;
     static bool_t rs;
 
-    /* Find out where the DMA engine's producer index has got to. */
-    prod = ARRAY_SIZE(dma_buf) - dma_i2c.cndtr;
-
     /* Process the command sequence. */
-    for (cons = dma_cons; cons != prod; cons = (cons+1) & buf_mask) {
-        uint8_t x = dma_buf[cons];
+    for (c = ring_cons; c != p; c = (c+1) & buf_mask) {
+        uint8_t x = ring[c];
         if ((x & (_EN|_RW)) != _EN)
             continue;
         lcd_display.on = !!(x & _BL);
@@ -153,7 +155,7 @@ void lcd_process(void)
         }
     }
 
-    dma_cons = cons;
+    ring_cons = c;
 }
 
 void lcd_init(void)
@@ -173,24 +175,13 @@ void lcd_init(void)
     IRQx_clear_pending(I2C_ERROR_IRQ);
     IRQx_enable(I2C_ERROR_IRQ);
 
-    /* Initialise DMA channel. */
-    dma_i2c.cmar = (uint32_t)(unsigned long)dma_buf;
-    dma_i2c.cpar = (uint32_t)(unsigned long)&i2c->dr;
-    dma_i2c.cndtr = ARRAY_SIZE(dma_buf);
-    dma_i2c.ccr = (DMA_CCR_MSIZE_8BIT |
-                   DMA_CCR_PSIZE_16BIT |
-                   DMA_CCR_MINC |
-                   DMA_CCR_CIRC |
-                   DMA_CCR_DIR_P2M |
-                   DMA_CCR_EN);
-
     /* Initialise I2C. */
     i2c->cr1 = 0;
     i2c->oar1 = 0x3a << 1;
     i2c->cr2 = (I2C_CR2_FREQ(36) |
                 I2C_CR2_ITERREN |
                 I2C_CR2_ITEVTEN |
-                I2C_CR2_DMAEN);
+                I2C_CR2_ITBUFEN);
     i2c->cr1 = I2C_CR1_ACK | I2C_CR1_PE;
 }
 
