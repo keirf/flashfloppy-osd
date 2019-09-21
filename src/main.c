@@ -51,7 +51,7 @@ void IRQ_23(void) __attribute__((alias("IRQ_csync"))); /* EXTI9_5 */
 void IRQ_40(void) __attribute__((alias("IRQ_vsync"))); /* EXTI15_10 */
 
 #define tim2_irq 28
-//void IRQ_28(void) __attribute__((alias("IRQ_TIM2")));
+void IRQ_28(void) __attribute__((alias("IRQ_pre_osd")));
 #define tim2_up_dma (dma1->ch2)
 #define tim2_up_dma_ch 2
 #define tim2_up_dma_tc_irq 12
@@ -119,7 +119,6 @@ static void button_timer_fn(void *unused)
     /* Latch final button state and reset the timer. */
     buttons |= b;
     timer_set(&button_timer, button_timer.deadline + time_ms(5));
-    
 }
 
 static int hline, frame;
@@ -200,6 +199,14 @@ static uint16_t dma_display_ccr = (DMA_CCR_PL_V_HIGH |
                                    DMA_CCR_TCIE |
                                    DMA_CCR_EN);
 
+/* Triggered by TIM2 1us before the start of the OSD box. We use this to 
+ * quiesce interrupts during the critical initial OSD DMAs. */
+static void IRQ_pre_osd(void)
+{
+    tim2->sr = 0;
+    delay_us(1);
+}
+
 static void IRQ_display_dma_complete(void)
 {
     /* Precise timing to disable the display output pin. */
@@ -233,8 +240,13 @@ static void setup_slave_timer(TIM tim)
 void slave_arr_update(void)
 {
     unsigned int hstart = config.h_off * 20;
+
+    /* Enable output pin first (TIM3) and then start SPI transfers (TIM2). */
     tim2->arr = hstart-1;
     tim3->arr = hstart-65;
+
+    /* Trigger TIM2 IRQ 1us before OSD box. */
+    tim2->ccr1 = hstart - sysclk_us(1);
 }
 
 void set_polarity(void)
@@ -449,6 +461,14 @@ int main(void)
                        DMA_CCR_EN);
     setup_slave_timer(tim3);
 
+    /* Timer 2 interrupts us horizontally just before the OSD box, so that 
+     * we can pause I2C DMA transfers. */
+    tim2->ccmr1 = TIM_CCMR1_CC1S(TIM_CCS_OUTPUT);
+    tim2->ccer = TIM_CCER_CC1E;
+    tim2->dier |= TIM_DIER_CC1IE;
+    IRQx_set_prio(tim2_irq, DISPLAY_IRQ_PRI);
+    IRQx_enable(tim2_irq);
+
     /* CSYNC is on Timer 1 Channel 1. Use it to trigger Timer 2 and 3. */
     tim1->psc = 0;
     tim1->arr = 0;
@@ -473,7 +493,9 @@ int main(void)
 
         canary_check();
 
-        /* Quiesce the CPU as much as possible while displaying OSD box. */
+        /* Quiesce the CPU as much as possible while displaying OSD box. 
+         * This makes the right-hand edge of the box (which is triggered 
+         * by IRQ) less jittery, due to less jitter in IRQ-entry latency. */
         if (hline >= (config.v_off - 3)) {
             struct cancellation wait_c;
             timer_cancel(&button_timer); /* avoids IRQ glitches */
