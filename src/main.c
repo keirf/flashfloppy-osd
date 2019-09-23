@@ -72,6 +72,15 @@ void IRQ_28(void) __attribute__((alias("IRQ_pre_osd")));
 #define dma_display_irq 15
 void IRQ_15(void) __attribute__((alias("IRQ_display_dma_complete")));
 
+#define gpio_dispen gpiob
+#define pin_dispen  12
+#define gpio_rom0   gpiob
+#define pin_rom0    8
+#define gpio_rom1   gpiob
+#define pin_rom1    9
+#define gpio_out2   gpiob
+#define pin_out2    10
+
 int EXC_reset(void) __attribute__((alias("main")));
 
 #include "font.h"
@@ -204,6 +213,7 @@ static uint16_t dma_display_ccr = (DMA_CCR_PL_V_HIGH |
 static void IRQ_pre_osd(void)
 {
     tim2->sr = 0;
+    gpio_write_pin(gpio_dispen, pin_dispen, HIGH);
     delay_us(1);
 }
 
@@ -216,6 +226,7 @@ static void IRQ_display_dma_complete(void)
     if (cur_display->cols & 1)
         delay_ticks(5);
     gpio_configure_pin(gpio_display, pin_display, GPI_floating);
+    gpio_write_pin(gpio_dispen, pin_dispen, LOW);
     IRQ_global_enable();
 
     /* Reset display output SPI DMA. Point at next row of data. */
@@ -326,7 +337,30 @@ static void update_amiga_keys(void)
     if (amiga_key_pressed(AMI_LEFT)) keys |= K_LEFT;
     if (amiga_key_pressed(AMI_RIGHT)) keys |= K_RIGHT;
     if (amiga_key_pressed(AMI_UP)) keys |= K_SELECT;
-    if (amiga_key_pressed(AMI_F1)) keys |= K_MENU;
+    if (amiga_key_pressed(AMI_HELP)) keys |= K_MENU;
+
+    if (amiga_key_pressed(AMI_F1)) {
+        gpio_write_pin(gpio_rom0, pin_rom0, LOW);
+        gpio_write_pin(gpio_rom1, pin_rom1, LOW);
+    }
+    if (amiga_key_pressed(AMI_F2)) {
+        gpio_write_pin(gpio_rom0, pin_rom0, HIGH);
+        gpio_write_pin(gpio_rom1, pin_rom1, LOW);
+    }
+    if (amiga_key_pressed(AMI_F3)) {
+        gpio_write_pin(gpio_rom0, pin_rom0, LOW);
+        gpio_write_pin(gpio_rom1, pin_rom1, HIGH);
+    }
+    if (amiga_key_pressed(AMI_F4)) {
+        gpio_write_pin(gpio_rom0, pin_rom0, HIGH);
+        gpio_write_pin(gpio_rom1, pin_rom1, HIGH);
+    }
+    if (amiga_key_pressed(AMI_F9)) {
+        gpio_write_pin(gpio_out2, pin_out2, LOW);
+    }
+    if (amiga_key_pressed(AMI_F10)) {
+        gpio_write_pin(gpio_out2, pin_out2, HIGH);
+    }
 }
 
 struct gotek_button {
@@ -395,6 +429,18 @@ int main(void)
 
     /* PB15 = Colour output */
     gpio_configure_pin(gpio_display, pin_display, GPI_floating);
+
+    /* PB12 = Display Enabled output */
+    gpio_configure_pin(gpio_dispen, pin_dispen, GPO_pushpull(_2MHz, HIGH));
+
+    /* PB8 = Kickstart ROM0 output */
+    gpio_configure_pin(gpio_rom0, pin_rom0, GPO_opendrain(_2MHz, HIGH));
+
+    /* PB9 = Kickstart ROM1 output */
+    gpio_configure_pin(gpio_rom1, pin_rom1, GPO_opendrain(_2MHz, HIGH));
+
+    /* PB10 = uncomitted output2 output */
+    gpio_configure_pin(gpio_out2, pin_out2, GPO_opendrain(_2MHz, HIGH));
 
     /* PA3,4,5: Gotek buttons */
     gpio_configure_pin(gpioa, 3, GPO_opendrain(_2MHz, HIGH));
