@@ -190,7 +190,9 @@ static void IRQ_csync(void)
     }
 }
 
-static uint32_t gpio_display_crh;
+#define OSD_OFF 0
+#define OSD_ON 1
+static uint32_t gpio_display_crh[2]; /* OSD_??? */
 static uint16_t dma_display_ccr = (DMA_CCR_PL_V_HIGH |
                                    DMA_CCR_MSIZE_16BIT |
                                    DMA_CCR_PSIZE_16BIT |
@@ -213,9 +215,14 @@ static void IRQ_display_dma_complete(void)
     IRQ_global_disable();
     while (!(spi_display->sr & SPI_SR_TXE))
         cpu_relax();
-    if (cur_display->cols & 1)
-        delay_ticks(5);
-    gpio_configure_pin(gpio_display, pin_display, GPI_floating);
+    if (cur_display->cols & 1) {
+        int i;
+        for (i = 0; i < 4; i++) {
+            asm volatile (
+                "nop; nop; nop; nop; nop; nop; nop; nop; nop; nop; nop" );
+        }
+    }
+    gpio_display->crh = gpio_display_crh[OSD_OFF];
     IRQ_global_enable();
 
     /* Reset display output SPI DMA. Point at next row of data. */
@@ -243,7 +250,7 @@ void slave_arr_update(void)
 
     /* Enable output pin first (TIM3) and then start SPI transfers (TIM2). */
     tim2->arr = hstart-1;
-    tim3->arr = hstart-65;
+    tim3->arr = hstart-49;
 
     /* Trigger TIM2 IRQ 1us before OSD box. */
     tim2->ccr1 = hstart - sysclk_us(1);
@@ -448,10 +455,11 @@ int main(void)
     /* Timer 3 is triggered by Timer 1. On underflow it triggers DMA 
      * to switch on the SPI output pin. */
     gpio_configure_pin(gpio_display, pin_display, AFO_pushpull(_50MHz));
-    gpio_display_crh = gpio_display->crh;
+    gpio_display_crh[OSD_ON] = gpio_display->crh;
     gpio_configure_pin(gpio_display, pin_display, GPI_floating);
+    gpio_display_crh[OSD_OFF] = gpio_display->crh;
     tim3_up_dma.cpar = (uint32_t)(unsigned long)&gpio_display->crh;
-    tim3_up_dma.cmar = (uint32_t)(unsigned long)&gpio_display_crh;
+    tim3_up_dma.cmar = (uint32_t)(unsigned long)&gpio_display_crh[OSD_ON];
     tim3_up_dma.cndtr = 1;
     tim3_up_dma.ccr = (DMA_CCR_PL_V_HIGH |
                        DMA_CCR_MSIZE_32BIT |

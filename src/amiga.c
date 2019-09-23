@@ -23,6 +23,14 @@ void IRQ_29(void) __attribute__((alias("IRQ_amikbd_clk")));
 
 static uint8_t keymap[0x68];
 
+/* Reconfiguring KB_DAT in IRQ context is safe as this modifies GPIOB_CRL which 
+ * is otherwise static. The only other dynamically-modified configuration 
+ * register is GPIOB_CRH (for toggling display output pin). */
+#define dat_pull_low() \
+    gpio_configure_pin(gpio_amikbd, pin_amikbd_dat, GPO_opendrain(_2MHz, LOW))
+#define dat_input() \
+    gpio_configure_pin(gpio_amikbd, pin_amikbd_dat, GPI_pull_up)
+
 static void handshake(void)
 {
     time_t t = time_now();
@@ -36,9 +44,9 @@ static void handshake(void)
     delay_us(5);
 
     /* Force handshake. 100us is plenty long enough. */
-    gpio_configure_pin(gpio_amikbd, pin_amikbd_dat, GPO_opendrain(_2MHz, LOW));
+    dat_pull_low();
     delay_us(100);
-    gpio_configure_pin(gpio_amikbd, pin_amikbd_dat, GPI_pull_up);
+    dat_input();
 }
 
 static void IRQ_amikbd_clk(void)
@@ -74,10 +82,8 @@ static void IRQ_amikbd_clk(void)
 
     /* Forcibly filter out key presses modified by L.Ctrl + L.Alt: We force
      * them to be viewed as key-release events by blatting KBDAT. */
-    if (bit && (keymap[AMI_L_CTRL] & 1) && (keymap[AMI_L_ALT] & 1)) {
-        gpio_configure_pin(gpio_amikbd, pin_amikbd_dat,
-                           GPO_opendrain(_2MHz, LOW));
-    }
+    if (bit && (keymap[AMI_L_CTRL] & 1) && (keymap[AMI_L_ALT] & 1))
+        dat_pull_low();
 
     /* Decode the keycode and update the keymap. */
     keycode = ~(keycode >> 1) & 0x7f;
