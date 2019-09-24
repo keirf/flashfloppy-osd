@@ -12,10 +12,15 @@
 /*
  * PIN ASSIGNMENTS:
  * 
+ * FF OSD I2C Special Protocol (use with FlashFloppy v3.4a or later):
+ *  A0-A1: Jumper/Strap
+ * 
  * Rotary Encoder:
  *  A0: CLK
  *  A1: DAT
  *  A2: SEL
+ * [NB. Rotary Encoder is unavailable if A0-A1 is jumpered, but FF OSD
+ *      can be configured via FlashFloppy]
  * 
  * Serial Console:
  *  A9: TX
@@ -74,6 +79,8 @@ void IRQ_15(void) __attribute__((alias("IRQ_display_dma_complete")));
 
 int EXC_reset(void) __attribute__((alias("main")));
 
+bool_t ff_osd_i2c_protocol;
+
 #include "font.h"
 
 /* Guard the stacks with known values. */
@@ -106,6 +113,9 @@ static void button_timer_fn(void *unused)
     static uint16_t _b;
     uint8_t b = B_PROCESSED;
 
+    if (ff_osd_i2c_protocol)
+        goto out; /* skip Rotary Encoder */
+
     /* We debounce the switch by waiting for it to be pressed continuously 
      * for 16 consecutive sample periods (16 * 5ms == 80ms) */
     _b <<= 1;
@@ -116,6 +126,7 @@ static void button_timer_fn(void *unused)
     rotary = ((rotary << 2) | (gpioa->idr & 3)) & 15;
     b |= (rotary_transitions[rotary_type] >> (rotary << 1)) & 3;
 
+out:
     /* Latch final button state and reset the timer. */
     buttons |= b;
     timer_set(&button_timer, button_timer.deadline + time_ms(5));
@@ -126,8 +137,10 @@ static int hline, frame;
 #define HLINE_VBL 0
 #define HLINE_SOF 1
 
-static uint16_t display_dat[42][40/2+1];
+#define MAX_DISPLAY_HEIGHT 52
+static uint16_t display_dat[MAX_DISPLAY_HEIGHT][40/2+1];
 static struct display *cur_display = &lcd_display;
+static uint16_t display_height;
 
 static void IRQ_vsync(void)
 {
@@ -179,7 +192,7 @@ static void IRQ_csync(void)
                       | TIM_SMCR_TS(5) /* Filtered TI1 */
                       | TIM_SMCR_SMS(4)); /* Reset Mode */
 
-    } else if (hline >= (config.v_off + (cur_display->rows*10+2))) {
+    } else if (hline >= (config.v_off + display_height)) {
 
     eof:
         /* End of frame: Disable TIM1 trigger and signal main loop. */
@@ -290,7 +303,7 @@ static int wait(void *_c)
     return 0;
 }
 
-static void render_line(unsigned int y, const struct display *display)
+static void render_line(int y, const struct display *display)
 {
     unsigned int x, row;
     const uint8_t *t;
@@ -298,15 +311,26 @@ static void render_line(unsigned int y, const struct display *display)
 
     memset(d, 0, sizeof(display_dat[0]));
 
+    /* Top two lines are blank. */
     y -= 2;
 
-    row = y / 10;
+    /* Work out which text row we are on. */
+    for (row = 0; row < display->rows; row++) {
+        int nr = (display->heights & (1u<<row)) ? 16 : 8;
+        if (y < 0)
+            return;
+        if (y < nr)
+            break;
+        y -= nr + 2; /* Two blank lines between each row of text. */
+    }
+
+    /* Done all rows? Final two lines are blank. */
     if (row >= display->rows)
         return;
 
-    y %= 10;
-    if (y >= 8)
-        return;
+    /* If this is a double-height row, each pixel line is repeated. */
+    if (display->heights & (1u<<row))
+        y /= 2;
 
     t = display->text[row];
 
@@ -385,6 +409,8 @@ int main(void)
     stm32_init();
     time_init();
     console_init();
+
+    ff_osd_i2c_protocol = gpio_pins_connected(gpioa, 0, gpioa, 1);
     lcd_init();
 
     /* PC13: Blue Pill Indicator LED (Active Low) */
@@ -523,15 +549,25 @@ int main(void)
 
         /* Have we just finished generating a frame? */
         if (frame) {
+            uint16_t height;
             if (lost_sync) {
                 printk("Sync found\n");
                 lost_sync = FALSE;
             }
             frame_time = time_now();
             frame = 0;
+            /* Work out what to display next frame. */
             cur_display = config_active ? &config_display : &lcd_display;
-            for (i = 0; i < cur_display->rows*10+2; i++)
+            /* Next frame height depends on #rows and height of each row. */
+            height = cur_display->rows*10+2;
+            for (i = 0; i < cur_display->rows; i++)
+                if (cur_display->heights & (1<<i))
+                    height += 8;
+            height = min_t(uint16_t, height, MAX_DISPLAY_HEIGHT);
+            /* Render to the SPI DMA buffer. */
+            for (i = 0; i < height; i++)
                 render_line(i, cur_display);
+            display_height = height;
         }
 
         update_amiga_keys();

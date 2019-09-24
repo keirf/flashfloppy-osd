@@ -99,12 +99,15 @@ void console_barrier(void);
 
 struct display {
     int rows, cols, on;
+    uint8_t heights;
     uint8_t text[4][40];
 };
 
+/* LCD / FF-OSD I2C Protocol. */
 void lcd_init(void);
 void lcd_process(void);
 extern struct display lcd_display;
+extern bool_t ff_osd_i2c_protocol;
 
 /* Configuration. */
 void config_init(void);

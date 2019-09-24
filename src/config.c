@@ -74,12 +74,15 @@ struct display config_display = {
 static enum {
     C_idle = 0,
     C_banner,
+    /* Output */
     C_polarity,
     C_h_off,
     C_v_off,
+    /* LCD */
     C_rows,
     C_min_cols,
     C_max_cols,
+    /* Exit */
     C_save,
     C_max
 } config_state;
@@ -173,6 +176,10 @@ void config_process(uint8_t b)
             printk("\n");
             config_printk(&config);
             lcd_display_update();
+        }
+        if ((config_state == C_rows) && ff_osd_i2c_protocol) {
+            /* Skip LCD config options if using the extended OSD protocol. */
+            config_state = C_save;
         }
         config_active = (config_state != C_idle);
         changed = TRUE;
