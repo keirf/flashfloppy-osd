@@ -46,6 +46,8 @@ void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
 
+size_t strlen(const char *s);
+size_t strnlen(const char *s, size_t maxlen);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strcpy(char *dest, const char *src);
@@ -76,6 +78,7 @@ int printk(const char *format, ...)
 #define htobe32(x) _rev32(x)
 
 /* Amiga keyboard */
+#define AMI_RETURN 0x44
 #define AMI_F1     0x50
 #define AMI_HELP   0x5f
 #define AMI_L_CTRL 0x63
@@ -83,6 +86,7 @@ int printk(const char *format, ...)
 #define AMI_LEFT   0x4f
 #define AMI_RIGHT  0x4e
 #define AMI_UP     0x4c
+extern bool_t keyboard_held;
 bool_t amiga_key_pressed(uint8_t keycode);
 #define amiga_key_pressed_now(k) (amiga_key_pressed(k) & 1)
 void amiga_init(void);

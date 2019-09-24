@@ -393,11 +393,14 @@ static void emulate_gotek_buttons(void)
     emulate_gotek_button(K_SELECT, &gs, 5);
 }
 
+static struct display notify;
+static time_t notify_time;
+
 int main(void)
 {
     int i;
     time_t frame_time;
-    bool_t lost_sync;
+    bool_t lost_sync, _keyboard_held;
 
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
@@ -523,6 +526,8 @@ int main(void)
     frame_time = time_now();
     lost_sync = FALSE;
 
+    _keyboard_held = keyboard_held;
+
     for (;;) {
 
         canary_check();
@@ -547,31 +552,61 @@ int main(void)
             printk("Sync lost\n");
         }
 
+        /* Keyboard hold/release notifier? */
+        if (keyboard_held != _keyboard_held) {
+            snprintf((char *)notify.text[0], sizeof(notify.text[0]),
+                     "Keyboard %s",
+                     keyboard_held ? "Held" : "Released");
+            notify.cols = strlen((char *)notify.text[0]);
+            notify.rows = 1;
+            notify.on = TRUE;
+            notify_time = time_now();
+            _keyboard_held = keyboard_held;
+        }
+
         /* Have we just finished generating a frame? */
         if (frame) {
+
             uint16_t height;
+
             if (lost_sync) {
                 printk("Sync found\n");
                 lost_sync = FALSE;
             }
+
             frame_time = time_now();
             frame = 0;
+
             /* Work out what to display next frame. */
             cur_display = config_active ? &config_display : &lcd_display;
+            if (notify.on) {
+                if (time_diff(notify_time, time_now()) > time_ms(2000)) {
+                    notify.on = FALSE;
+                } else {
+                    cur_display = &notify;
+                }
+            }
+
             /* Next frame height depends on #rows and height of each row. */
             height = cur_display->rows*10+2;
             for (i = 0; i < cur_display->rows; i++)
                 if (cur_display->heights & (1<<i))
                     height += 8;
             height = min_t(uint16_t, height, MAX_DISPLAY_HEIGHT);
+
             /* Render to the SPI DMA buffer. */
             for (i = 0; i < height; i++)
                 render_line(i, cur_display);
             display_height = height;
+
         }
 
         update_amiga_keys();
         emulate_gotek_buttons();
+
+        /* Clear keyboard-hold/release notifier upon further key presses. */
+        if (keys)
+            notify.on = FALSE;
 
         if (buttons) {
             /* Atomically snapshot and clear the button state. */

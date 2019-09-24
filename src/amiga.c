@@ -49,6 +49,12 @@ static void handshake(void)
     dat_input();
 }
 
+bool_t keyboard_held;
+static bool_t modifiers_held(void)
+{
+    return (keymap[AMI_L_CTRL] & 1) && (keymap[AMI_L_ALT] & 1);
+}
+
 static void IRQ_amikbd_clk(void)
 {
     time_t t = time_now();
@@ -82,16 +88,19 @@ static void IRQ_amikbd_clk(void)
 
     /* Forcibly filter out key presses modified by L.Ctrl + L.Alt: We force
      * them to be viewed as key-release events by blatting KBDAT. */
-    if (bit && (keymap[AMI_L_CTRL] & 1) && (keymap[AMI_L_ALT] & 1))
+    if (bit && (modifiers_held() || keyboard_held))
         dat_pull_low();
 
     /* Decode the keycode and update the keymap. */
     keycode = ~(keycode >> 1) & 0x7f;
     if (keycode < sizeof(keymap)) {
-        if (bit)
+        if (bit) {
+            if ((keycode == AMI_RETURN) && modifiers_held())
+                keyboard_held ^= 1;
             keymap[keycode] = 3;
-        else
+        } else {
             keymap[keycode] &= 2;
+        }
     }
 
     /* Acknowledge the byte (some games and demos have no keyboard handler). */
@@ -107,9 +116,7 @@ bool_t amiga_key_pressed(uint8_t keycode)
     } while ((state & 2)
              && (cmpxchg(&keymap[keycode], state, state & 1) != state));
     /* Only return key presses while the modifier keys are held. */
-    if ((keymap[AMI_L_CTRL] & 1) && (keymap[AMI_L_ALT] & 1))
-        return !!state;
-    return FALSE;
+    return (modifiers_held() || keyboard_held) ? !!state : FALSE;
 }
 
 void amiga_init(void)

@@ -39,6 +39,22 @@ void *memmove(void *dest, const void *src, size_t n)
     return dest;
 }
 
+size_t strlen(const char *s)
+{
+    size_t len = 0;
+    while (*s++)
+        len++;
+    return len;
+}
+
+size_t strnlen(const char *s, size_t maxlen)
+{
+    size_t len = 0;
+    while (maxlen-- && *s++)
+        len++;
+    return len;
+}
+
 int strcmp(const char *s1, const char *s2)
 {
     return strncmp(s1, s2, ~0);
