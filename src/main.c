@@ -357,7 +357,7 @@ static void update_amiga_keys(void)
     if (amiga_key_pressed(AMI_LEFT)) keys |= K_LEFT;
     if (amiga_key_pressed(AMI_RIGHT)) keys |= K_RIGHT;
     if (amiga_key_pressed(AMI_UP)) keys |= K_SELECT;
-    if (amiga_key_pressed(AMI_F1)) keys |= K_MENU;
+    if (amiga_key_pressed(AMI_HELP)) keys |= K_MENU;
 }
 
 struct gotek_button {
