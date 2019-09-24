@@ -3,6 +3,15 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.3 - 24 September 2019
+ - Improved display stability (no visible glitches)
+ - FlashFloppy: Support custom I2C protocol when A0-A1 pins jumpered
+   - Enhanced display output (eg. selective double height rows)
+   - Allows I2C bus sharing with original OLED or LCD display
+ - Amiga keyboard: HELP replaces F1 as the FF OSD Config hotkey
+ - Amiga keyboard: L.Ctrl-L.Alt-Return steals the keyboard
+   - L.Ctrl and L.Alt do not need to be held while keyboard is stolen
+
 ** v1.2 - 20 September 2019
  - Move Gotek button outputs from C13-15 to A3-5
    - C13-15 are weak outputs
