@@ -62,12 +62,16 @@ void IRQ_40(void) __attribute__((alias("IRQ_vsync"))); /* EXTI15_10 */
 #define tim1_ch3_dma (dma1->ch6)
 #define tim1_ch3_dma_ch 6
 #define tim1_ch3_dma_tc_irq 16
-void IRQ_16(void) __attribute__((alias("IRQ_post_osd")));
+void IRQ_16(void) __attribute__((alias("IRQ_osd_end")));
+
+/* TIM1 Ch.4: Triggered 1us before TIM1 Ch.3. Generates IRQ. */
+#define tim1_cc_irq 27
+void IRQ_27(void) __attribute__((alias("IRQ_osd_pre_end")));
 
 /* TIM2: Ch.1 Output Compare triggers IRQ. Overflow triggers SPI DMA. 
  * Counter starts on TIM1 UEV (itself triggered by TIM1 Ch.1 input pin). */
 #define tim2_irq 28
-void IRQ_28(void) __attribute__((alias("IRQ_pre_osd")));
+void IRQ_28(void) __attribute__((alias("IRQ_osd_pre_start")));
 #define tim2_up_dma (dma1->ch2)
 #define tim2_up_dma_ch 2
 #define tim2_up_dma_tc_irq 12
@@ -89,7 +93,7 @@ void IRQ_28(void) __attribute__((alias("IRQ_pre_osd")));
 
 /* List of interrupts used by the display-sync and -output system. */
 const static uint8_t irqs[] = {
-    tim2_irq, tim1_ch3_dma_tc_irq, irq_csync, irq_vsync
+    tim1_cc_irq, tim2_irq, tim1_ch3_dma_tc_irq, irq_csync, irq_vsync
 };
 
 int EXC_reset(void) __attribute__((alias("main")));
@@ -252,7 +256,7 @@ static uint16_t dma_display_ccr = (DMA_CCR_PL_V_HIGH |
 /* Triggered by TIM2 1us before the start of the OSD box. We use this to 
  * quiesce interrupts during the critical initial OSD DMAs. We also retask
  * TIM1 to cleanly finish the OSD box at end of line. */
-static void IRQ_pre_osd(void)
+static void IRQ_osd_pre_start(void)
 {
     /* Set TIM1 to start counting when triggered by TIM2. Output-compare 
      * will trigger DMA to disable OSD output at end of line. */
@@ -263,8 +267,15 @@ static void IRQ_pre_osd(void)
     delay_us(1);
 }
 
+/* Triggered by TIM1's Ch.4 Output Compare. */
+static void IRQ_osd_pre_end(void)
+{
+    tim1->sr = 0;
+    delay_us(1);
+}
+
 /* Triggered by TIM1's DMA completion at horizontal end of OSD box. */
-static void IRQ_post_osd(void)
+static void IRQ_osd_end(void)
 {
     /* Clear interrupt and stop timer. */
     dma1->ifcr = DMA_IFCR_CGIF(tim1_ch3_dma_ch);
@@ -315,26 +326,6 @@ void set_polarity(void)
         exti->ftsr |= m(pin_csync) | m(pin_vsync); /* Falling edge */
         tim1->ccer &= ~TIM_CCER_CC1P; /* Rising edge */
     }
-}
-
-static void wakeup(void *_c)
-{
-    struct cancellation *c = _c;
-    cancel_call(c);
-}
-
-static int wait(void *_c)
-{
-    struct cancellation *c = _c;
-    struct timer t;
-
-    timer_init(&t, wakeup, c);
-    timer_set(&t, time_now() + time_ms(5));
-
-    for (;;)
-        cpu_wfi();
-
-    return 0;
 }
 
 static void render_line(int y, const struct display *display)
@@ -555,6 +546,11 @@ int main(void)
     tim2->cr2 = TIM_CR2_MMS(2); /* UEV -> TRGO */
     tim1->ccer |= TIM_CCER_CC3E;
 
+    /* Timer 1 Channel 4 is used to trigger an IRQ before OSD end. */
+    tim1->ccmr2 |= TIM_CCMR2_CC4S(TIM_CCS_OUTPUT);
+    tim1->dier |= TIM_DIER_CC4IE;
+    tim1->ccer |= TIM_CCER_CC4E;
+
     slave_arr_update();
     set_polarity();
 
@@ -578,12 +574,13 @@ int main(void)
 
         canary_check();
 
-        /* Quiesce the CPU as much as possible while displaying OSD box.
-         * This also avoids modifying config values etc during the critical
-         * display period, which could cause glitches. */
-        if (hline >= (config.v_off - 3)) {
-            struct cancellation wait_c;
-            call_cancellable_fn(&wait_c, wait, &wait_c);
+        /* Wait while displaying OSD box. This avoids modifying config values 
+         * etc during the critical display period, which could cause
+         * glitches. */
+        for (i = 0; i < 5; i++) { /* up to 5ms */
+            if (hline < (config.v_off - 3))
+                break;
+            delay_ms(1);
         }
 
         /* Check for losing sync: no valid frame in over 100ms. */
@@ -646,6 +643,7 @@ int main(void)
                  * x [8 pixels per character] x [@cols characters] 
                  * + [allowance for OSD box lead-in and lead-out] */
                 tim1->ccr3 = 8 * 8 * cur_display->cols + 80;
+                tim1->ccr4 = tim1->ccr3 - sysclk_us(1);
                 barrier(); /* Set post-OSD timeout /then/ enable display */
                 display_height = height;
             } else {
