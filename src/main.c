@@ -676,6 +676,8 @@ int main(void)
             } else {
                 if (keys & K_MENU) b |= B_SELECT;
             }
+            /* Fold in button presses remoted via I2C. */
+            b |= ff_osd_buttons;
             /* Pass button presses to config subsystem for processing. */
             config_process(b & ~B_PROCESSED);
         }

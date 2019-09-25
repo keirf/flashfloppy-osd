@@ -113,6 +113,7 @@ void lcd_init(void);
 void lcd_process(void);
 extern struct display lcd_display;
 extern bool_t ff_osd_i2c_protocol;
+extern uint8_t ff_osd_buttons;
 
 /* Configuration. */
 void config_init(void);
