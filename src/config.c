@@ -55,8 +55,13 @@ void config_init(void)
 
     config = *flash_config;
     crc = crc16_ccitt(&config, sizeof(config), 0xffff);
-    if (crc)
+    if (crc) {
         config = dfl_config;
+    } else if (gpio_pins_connected(gpioa, 1, gpioa, 2)) {
+        printk("\nA1-A2 Jumpered: Resetting to Factory Defaults\n");
+        config = dfl_config;
+        config_write_flash(&config);
+    }
 
     config_printk(&config);
 
