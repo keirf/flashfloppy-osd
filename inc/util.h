@@ -127,10 +127,6 @@ extern struct config {
 extern bool_t config_active;
 extern struct display config_display;
 
-/* Callbacks from configuration subsystem. */
-void slave_arr_update(void);
-void set_polarity(void);
-
 /* Build info. */
 extern const char fw_ver[];
 

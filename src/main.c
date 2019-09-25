@@ -170,26 +170,31 @@ static uint16_t display_dat[MAX_DISPLAY_HEIGHT][40/2+1];
 static struct display *cur_display = &lcd_display;
 static uint16_t display_height;
 
-static always_inline void eof(void)
+static void slave_arr_update(void)
 {
-    /* End of frame: Disable TIM1 trigger and signal main loop. */
-    tim1->smcr = 0;
-    hline = HLINE_EOF;
-    frame++;
+    unsigned int hstart = config.h_off * 20;
+
+    /* Enable output pin first (TIM3) and then start SPI transfers (TIM2). */
+    tim2->arr = hstart-1;
+    tim3->arr = hstart-49;
+
+    /* Trigger TIM2 IRQ 1us before OSD box. */
+    tim2->ccr1 = hstart - sysclk_us(1);
 }
 
-static always_inline void setup_display_line(void)
+static void set_polarity(void)
 {
-    /* Set TIM1 to reset (causing UEV) when triggered by Ch.1 input pin 
-     * (Ch.1 input pin is CSYNC/HSYNC, triggering on end-of-sync). */
-    tim1->smcr = (TIM_SMCR_MSM
-                  | TIM_SMCR_TS(5) /* Filtered TI1 */
-                  | TIM_SMCR_SMS(4)); /* Reset Mode */
-
-    /* Point SPI DMA at next line of data. */
-    dma_display.ccr = 0;
-    dma_display.cndtr = cur_display->cols/2 + 1;
-    dma_display.cmar += sizeof(display_dat[0]);
+    if (config.polarity) {
+        /* Active High: Rising edge = sync start */
+        exti->ftsr &= ~(m(pin_csync) | m(pin_vsync));
+        exti->rtsr |= m(pin_csync) | m(pin_vsync); /* Rising edge */
+        tim1->ccer |= TIM_CCER_CC1P; /* Falling edge */
+    } else {
+        /* Active Low: Falling edge = sync start */
+        exti->rtsr &= ~(m(pin_csync) | m(pin_vsync));
+        exti->ftsr |= m(pin_csync) | m(pin_vsync); /* Falling edge */
+        tim1->ccer &= ~TIM_CCER_CC1P; /* Rising edge */
+    }
 }
 
 static void IRQ_vsync(void)
@@ -228,17 +233,40 @@ static void IRQ_csync(void)
             /* Short sync: We are outside the vblank period. Start frame (we
              * were previously in vblank). */
             if (display_height == 0)
-                return eof();
+                goto eof;
             hline = HLINE_SOF;
+            slave_arr_update();
             set_polarity();
 
         }
 
-    } else if ((hline < config.v_off) && (++hline == config.v_off)) {
+    } else if (++hline < config.v_off) {
 
-        /* Set up for first line of OSD box. */
-        setup_display_line();
-        dma_display.cmar = (uint32_t)(unsigned long)display_dat;
+        /* Before vertical start of OSD: Do nothing. */
+
+    } else if (hline >= (config.v_off + display_height)) {
+
+    eof:
+        /* Vertical end of OSD: Disable TIM1 trigger and signal main loop. */
+        tim1->smcr = 0;
+        hline = HLINE_EOF;
+        frame++;
+
+    } else {
+
+        /* Within OSD vertical area: Set up for next line. */
+
+        /* Set TIM1 to reset (causing UEV) when triggered by Ch.1 input pin
+         * (Ch.1 input pin is CSYNC/HSYNC, triggering on end-of-sync). */
+        tim1->smcr = (TIM_SMCR_MSM
+                      | TIM_SMCR_TS(5) /* Filtered TI1 */
+                      | TIM_SMCR_SMS(4)); /* Reset Mode */
+
+        if (hline == config.v_off) {
+            /* Set up for first line of OSD box. */
+            dma_display.cmar = (uint32_t)(unsigned long)display_dat;
+        }
+
 
     }
 }
@@ -281,12 +309,10 @@ static void IRQ_osd_end(void)
     dma1->ifcr = DMA_IFCR_CGIF(tim1_ch3_dma_ch);
     tim1->cr1 &= ~TIM_CR1_CEN;
 
-    /* Set up for next display line, or signal end of frame. */
-    if (++hline >= (config.v_off + display_height)) {
-        eof();
-    } else {
-        setup_display_line();
-    }
+    /* Point SPI DMA at next line of data. */
+    dma_display.ccr = 0;
+    dma_display.cndtr = cur_display->cols/2 + 1;
+    dma_display.cmar += sizeof(display_dat[0]);
 }
 
 /* Set up a slave timer to be triggered by TIM1. */
@@ -299,33 +325,6 @@ static void setup_slave_timer(TIM tim)
     tim->cr1 = TIM_CR1_ARPE | TIM_CR1_URS | TIM_CR1_OPM;
     tim->smcr = (TIM_SMCR_TS(0) /* Timer 1 */
                  | TIM_SMCR_SMS(6)); /* Trigger Mode (starts counter) */
-}
-
-void slave_arr_update(void)
-{
-    unsigned int hstart = config.h_off * 20;
-
-    /* Enable output pin first (TIM3) and then start SPI transfers (TIM2). */
-    tim2->arr = hstart-1;
-    tim3->arr = hstart-49;
-
-    /* Trigger TIM2 IRQ 1us before OSD box. */
-    tim2->ccr1 = hstart - sysclk_us(1);
-}
-
-void set_polarity(void)
-{
-    if (config.polarity) {
-        /* Active High: Rising edge = sync start */
-        exti->ftsr &= ~(m(pin_csync) | m(pin_vsync));
-        exti->rtsr |= m(pin_csync) | m(pin_vsync); /* Rising edge */
-        tim1->ccer |= TIM_CCER_CC1P; /* Falling edge */
-    } else {
-        /* Active Low: Falling edge = sync start */
-        exti->rtsr &= ~(m(pin_csync) | m(pin_vsync));
-        exti->ftsr |= m(pin_csync) | m(pin_vsync); /* Falling edge */
-        tim1->ccer &= ~TIM_CCER_CC1P; /* Rising edge */
-    }
 }
 
 static void render_line(int y, const struct display *display)
@@ -562,6 +561,7 @@ int main(void)
 
     for (i = 0; i < ARRAY_SIZE(irqs); i++) {
         IRQx_set_prio(irqs[i], SYNC_IRQ_PRI);
+        IRQx_set_pending(irqs[i]);
         IRQx_enable(irqs[i]);
     }
 
