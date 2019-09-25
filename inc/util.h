@@ -145,7 +145,6 @@ extern uint32_t _irq_stacktop[], _irq_stackbottom[];
 
 /* IRQ priorities, 0 (highest) to 15 (lowest). */
 #define SYNC_IRQ_PRI          2
-#define DISPLAY_IRQ_PRI       3
 #define I2C_IRQ_PRI           4
 #define AMIKBD_IRQ_PRI        5
 #define TIMER_IRQ_PRI         8
