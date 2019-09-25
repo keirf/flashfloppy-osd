@@ -3,6 +3,12 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.4 - 25 September 2019
+ - Further improvements to display stability
+ - Support Gotek buttons for OSD configuration
+   - Requires FlashFloppy v3.4a or later
+ - Jumper A1-A2 to reset FF OSD to factory defaults
+
 ** v1.3 - 24 September 2019
  - Improved display stability (no visible glitches)
  - FlashFloppy: Support custom I2C protocol when A0-A1 pins jumpered
