@@ -583,14 +583,17 @@ int main(void)
             delay_ms(1);
         }
 
-        /* Check for losing sync: no valid frame in over 100ms. */
-        if (!lost_sync && (time_diff(frame_time, time_now()) > time_ms(100))) {
+        /* Check for losing sync: no valid frame in over 100ms. We repeat the 
+         * forced reset every 100ms until sync is re-established. */
+        if (time_diff(frame_time, time_now()) > time_ms(100)) {
+            if (!lost_sync)
+                printk("Sync lost\n");
             lost_sync = TRUE;
+            frame_time = time_now();
             IRQ_global_disable();
             tim1->smcr = 0;
             hline = HLINE_EOF;
             IRQ_global_enable();
-            printk("Sync lost\n");
         }
 
         /* Keyboard hold/release notifier? */
