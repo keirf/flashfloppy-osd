@@ -331,6 +331,9 @@ static uint8_t keys;
 #define K_SELECT B_SELECT
 #define K_MENU   8
 
+static int kickstart = 3;
+static bool_t output2 = 1;
+
 static void update_amiga_keys(void)
 {
     keys = 0;
@@ -340,26 +343,69 @@ static void update_amiga_keys(void)
     if (amiga_key_pressed(AMI_HELP)) keys |= K_MENU;
 
     if (amiga_key_pressed(AMI_F1)) {
-        gpio_write_pin(gpio_rom0, pin_rom0, LOW);
-        gpio_write_pin(gpio_rom1, pin_rom1, LOW);
+        kickstart = 0;
+        update_kickstart();
     }
     if (amiga_key_pressed(AMI_F2)) {
-        gpio_write_pin(gpio_rom0, pin_rom0, HIGH);
-        gpio_write_pin(gpio_rom1, pin_rom1, LOW);
+        kickstart = 1;
+        update_kickstart();
     }
     if (amiga_key_pressed(AMI_F3)) {
-        gpio_write_pin(gpio_rom0, pin_rom0, LOW);
-        gpio_write_pin(gpio_rom1, pin_rom1, HIGH);
+        kickstart = 2;
+        update_kickstart();
     }
     if (amiga_key_pressed(AMI_F4)) {
-        gpio_write_pin(gpio_rom0, pin_rom0, HIGH);
-        gpio_write_pin(gpio_rom1, pin_rom1, HIGH);
+        kickstart = 3;
+        update_kickstart();
     }
     if (amiga_key_pressed(AMI_F9)) {
-        gpio_write_pin(gpio_out2, pin_out2, LOW);
+        output2 = 0;
+        update_kickstart();
     }
     if (amiga_key_pressed(AMI_F10)) {
-        gpio_write_pin(gpio_out2, pin_out2, HIGH);
+        output2 = 1;
+        update_kickstart();
+    }
+}
+
+void update_kickstart (void) {
+
+    switch (output2) {
+        case 0:
+            gpio_write_pin(gpio_out2, pin_out2, LOW);
+            break;
+
+        case 1:
+            gpio_write_pin(gpio_out2, pin_out2, HIGH);
+            break;
+
+        default:
+            break;
+    }
+
+    switch (kickstart) {
+        case 0:
+            gpio_write_pin(gpio_rom0, pin_rom0, LOW);
+            gpio_write_pin(gpio_rom1, pin_rom1, LOW);
+            break;
+
+        case 1:
+            gpio_write_pin(gpio_rom0, pin_rom0, HIGH);
+            gpio_write_pin(gpio_rom1, pin_rom1, LOW);
+            break;
+
+        case 2:
+            gpio_write_pin(gpio_rom0, pin_rom0, LOW);
+            gpio_write_pin(gpio_rom1, pin_rom1, HIGH);
+            break;
+
+        case 3:
+            gpio_write_pin(gpio_rom0, pin_rom0, HIGH);
+            gpio_write_pin(gpio_rom1, pin_rom1, HIGH);
+            break;
+
+        default:
+            break;
     }
 }
 

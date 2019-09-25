@@ -125,6 +125,8 @@ extern struct config {
 extern bool_t config_active;
 extern struct display config_display;
 
+void update_kickstart (void);
+
 /* Callbacks from configuration subsystem. */
 void slave_arr_update(void);
 void set_polarity(void);
