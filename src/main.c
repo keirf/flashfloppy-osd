@@ -174,6 +174,9 @@ static void button_timer_fn(void *unused)
     timer_set(&button_timer, button_timer.deadline + time_ms(5));
 }
 
+static struct display notify;
+static time_t notify_time;
+
 static int kickstart = 3;
 static bool_t output2 = 1;
 
@@ -186,20 +189,17 @@ void update_kickstart (bool_t show_banner) {
     gpio_write_pin(gpio_rom1, pin_rom1, bit1);
 
     gpio_write_pin(gpio_out2, pin_out2, output2);
-/*
-    switch (output2) {
-        case 0:
-            gpio_write_pin(gpio_out2, pin_out2, LOW);
-            break;
 
-        case 1:
-            gpio_write_pin(gpio_out2, pin_out2, HIGH);
-            break;
-
-        default:
-            break;
+    if (show_banner) {
+        snprintf((char *)notify.text[0], sizeof(notify.text[0]),
+                 "Kickstart %d", kickstart+1);
+        snprintf((char *)notify.text[1], sizeof(notify.text[1]),
+                 "Output2 %s", output2 ? "HIGH" : "LOW");
+        notify.cols = max ( strlen((char *)notify.text[0]), strlen((char *)notify.text[1]) );
+        notify.rows = 2;
+        notify.on = TRUE;
+        notify_time = time_now();
     }
-*/
 }
 
 static int hline, frame;
@@ -482,9 +482,6 @@ static void emulate_gotek_buttons(void)
     emulate_gotek_button(K_RIGHT, &gr, 4);
     emulate_gotek_button(K_SELECT, &gs, 5);
 }
-
-static struct display notify;
-static time_t notify_time;
 
 int main(void)
 {
