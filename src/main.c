@@ -43,6 +43,11 @@
  * Amiga keyboard:
  *  B3: KBDAT
  *  B4: KBCLK
+ *
+ * Amiga outputs:
+ *  B8: kickstart rom select 0
+ *  B9: kickstart rom select 1
+ *  B10: output 2
  */
 
 /* CSYNC/HSYNC (A8): EXTI IRQ trigger and TIM1 Ch.1 trigger. */
@@ -167,6 +172,34 @@ static void button_timer_fn(void *unused)
     /* Latch final button state and reset the timer. */
     buttons |= b;
     timer_set(&button_timer, button_timer.deadline + time_ms(5));
+}
+
+static int kickstart = 3;
+static bool_t output2 = 1;
+
+void update_kickstart (bool_t show_banner) {
+
+    bool_t bit0, bit1;
+    bit0 = (kickstart & 0b001) ? HIGH : LOW;
+    bit1 = (kickstart & 0b010) ? HIGH : LOW;
+    gpio_write_pin(gpio_rom0, pin_rom0, bit0);
+    gpio_write_pin(gpio_rom1, pin_rom1, bit1);
+
+    gpio_write_pin(gpio_out2, pin_out2, output2);
+/*
+    switch (output2) {
+        case 0:
+            gpio_write_pin(gpio_out2, pin_out2, LOW);
+            break;
+
+        case 1:
+            gpio_write_pin(gpio_out2, pin_out2, HIGH);
+            break;
+
+        default:
+            break;
+    }
+*/
 }
 
 static int hline, frame;
@@ -391,11 +424,29 @@ static void update_amiga_keys(void)
     if (amiga_key_pressed(AMI_RIGHT)) keys |= K_RIGHT;
     if (amiga_key_pressed(AMI_UP)) keys |= K_SELECT;
     if (amiga_key_pressed(AMI_HELP)) keys |= K_MENU;
+    if (amiga_key_pressed(AMI_F1)) {
+        kickstart = 0;
+        update_kickstart(TRUE);
+    }
+    if (amiga_key_pressed(AMI_F2)) {
+        kickstart = 1;
+        update_kickstart(TRUE);
+    }
+    if (amiga_key_pressed(AMI_F3)) {
+        kickstart = 2;
+        update_kickstart(TRUE);
+    }
+    if (amiga_key_pressed(AMI_F4)) {
+        kickstart = 3;
+        update_kickstart(TRUE);
+    }
     if (amiga_key_pressed(AMI_F9)) {
-        gpio_write_pin(gpio_out2, pin_out2, LOW);
+        output2 = 0;
+        update_kickstart(TRUE);
     }
     if (amiga_key_pressed(AMI_F10)) {
-        gpio_write_pin(gpio_out2, pin_out2, HIGH);
+        output2 = 1;
+        update_kickstart(TRUE);
     }
 }
 
