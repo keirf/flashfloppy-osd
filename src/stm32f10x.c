@@ -134,9 +134,9 @@ static void clock_init(void)
 
 static void gpio_init(GPIO gpio)
 {
-    /* All pins are in weak Pull-Down mode. */
+    /* All pins are in weak Pull-Up mode. */
+    gpio->bsrr = 0xffff;
     gpio->crl = gpio->crh = 0x88888888u;
-    gpio->odr = 0;
 }
 
 static void peripheral_init(void)
@@ -271,15 +271,48 @@ void gpio_configure_pin(GPIO gpio, unsigned int pin, unsigned int mode)
 bool_t gpio_pins_connected(GPIO gpio1, unsigned int pin1,
                            GPIO gpio2, unsigned int pin2)
 {
-    bool_t connected;
-    /* Test if pin2 can pull pin1 high... */
+    bool_t connected = FALSE;
+
+    /* STEP 1. Use only weak internal pullups and pulldowns, to determine
+     * whether the pins are externally driven or tied. */
+
+    /* Can both pins pull low? */
     gpio_configure_pin(gpio1, pin1, GPI_pull_down);
-    gpio_configure_pin(gpio2, pin2, GPO_pushpull(_2MHz, HIGH));
-    delay_us(5);
-    /* ...if so, the pins are indeed connected. */
-    connected = gpio_read_pin(gpio1, pin1);
-    /* Return pins to their default configuration. */
     gpio_configure_pin(gpio2, pin2, GPI_pull_down);
+    delay_us(5);
+    if (gpio_read_pin(gpio1, pin1) || gpio_read_pin(gpio2, pin2))
+        goto out;
+
+    /* Can both pins pull up? */
+    gpio_configure_pin(gpio1, pin1, GPI_pull_up);
+    gpio_configure_pin(gpio2, pin2, GPI_pull_up);
+    delay_us(5);
+    if (!gpio_read_pin(gpio1, pin1) || !gpio_read_pin(gpio2, pin2))
+        goto out;
+
+    /* STEP 2. Drive one pin and then the other LOW, to determine whether 
+     * the pins are connected. */
+
+    /* Can pin2 pull pin1 low? */
+    gpio_configure_pin(gpio1, pin1, GPI_pull_up);
+    gpio_configure_pin(gpio2, pin2, GPO_pushpull(_2MHz, LOW));
+    delay_us(5);
+    if (gpio_read_pin(gpio1, pin1))
+        goto out;
+
+    /* Can pin1 pull pin2 low? */
+    gpio_configure_pin(gpio2, pin2, GPI_pull_up);
+    gpio_configure_pin(gpio1, pin1, GPO_pushpull(_2MHz, LOW));
+    delay_us(5);
+    if (gpio_read_pin(gpio2, pin2))
+        goto out;
+
+    connected = TRUE;
+
+out:
+    /* Return pins to their default configuration. */
+    gpio_configure_pin(gpio1, pin1, GPI_pull_up);
+    gpio_configure_pin(gpio2, pin2, GPI_pull_up);
     return connected;
 }
 
