@@ -91,6 +91,15 @@ void IRQ_28(void) __attribute__((alias("IRQ_osd_pre_start")));
 #define dma_display_ch 5
 #define dma_display_irq 15
 
+#define gpio_dispen gpiob
+#define pin_dispen  12
+#define gpio_rom0   gpiob
+#define pin_rom0    8
+#define gpio_rom1   gpiob
+#define pin_rom1    9
+#define gpio_out2   gpiob
+#define pin_out2    10
+
 /* List of interrupts used by the display-sync and -output system. */
 const static uint8_t irqs[] = {
     tim1_cc_irq, tim2_irq, tim1_ch3_dma_tc_irq, irq_csync, irq_vsync
@@ -383,6 +392,12 @@ static void update_amiga_keys(void)
     if (amiga_key_pressed(AMI_RIGHT)) keys |= K_RIGHT;
     if (amiga_key_pressed(AMI_UP)) keys |= K_SELECT;
     if (amiga_key_pressed(AMI_HELP)) keys |= K_MENU;
+    if (amiga_key_pressed(AMI_F9)) {
+        gpio_write_pin(gpio_out2, pin_out2, LOW);
+    }
+    if (amiga_key_pressed(AMI_F10)) {
+        gpio_write_pin(gpio_out2, pin_out2, HIGH);
+    }
 }
 
 struct gotek_button {
@@ -456,6 +471,16 @@ int main(void)
 
     /* PB15 = Colour output */
     gpio_configure_pin(gpio_display, pin_display, GPI_floating);
+
+    /* PB12 = Display Enabled output */
+    gpio_configure_pin(gpio_dispen, pin_dispen, GPO_pushpull(_2MHz, HIGH));
+
+    /* PB8,9 = Kickstart ROM outputs */
+    gpio_configure_pin(gpio_rom0, pin_rom0, GPO_opendrain(_2MHz, HIGH));
+    gpio_configure_pin(gpio_rom1, pin_rom1, GPO_opendrain(_2MHz, HIGH));
+
+    /* PB10 = uncomitted output2 output */
+    gpio_configure_pin(gpio_out2, pin_out2, GPO_opendrain(_2MHz, HIGH));
 
     /* PA3,4,5: Gotek buttons */
     gpio_configure_pin(gpioa, 3, GPO_opendrain(_2MHz, HIGH));
