@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.y - xx September 2019
+ - Use Amiga keyboard to set GPIO pins
+   - Amiga kickstart selection with F1..F4 on PB8,PB9
+   - Set spare output to low/high with F9/F10 on PB10
+
 ** v1.4 - 25 September 2019
  - Further improvements to display stability
  - Support Gotek buttons for OSD configuration
