@@ -1,11 +1,13 @@
 # FF OSD: On Screen Display for FlashFloppy
 
-An On Screen Display (OSD) which emulates the popular LCD I2C interface.
+An On Screen Display (OSD) and keyboard controller for
+[**FlashFloppy**][FF]:
+- Send FlashFloppy output to your computer's video display
+- Control FlashFloppy via your Amiga keyboard (*optional*)
 
-Hence it can be connected to a range of hardware which targets this type
-of LCD display.
-
-Most specifically: [FlashFloppy][FF]!
+FF OSD also emulates the popular LCD I2C interface, allowing
+connection to a wider range of hardware which traditionally uses an
+LCD.
 
 ## Download
 - [**Download FF OSD**][Downloads]

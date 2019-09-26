@@ -42,6 +42,7 @@ static uint16_t ring_cons, ring_prod;
 static bool_t lcd_inc;
 static uint8_t lcd_ddraddr;
 struct display lcd_display;
+uint8_t ff_osd_buttons;
 
 /* I2C Error ISR: As slave with clock stretc we can only receive:
  *  Bus error (BERR): Peripheral automatically recovers
@@ -136,6 +137,7 @@ static void process_dat(uint8_t dat)
 #define OSD_DATA         0x02 /* next columns*rows bytes are text data */
 #define OSD_ROWS         0x10 /* [3:0] = #rows */
 #define OSD_HEIGHTS      0x20 /* [3:0] = 1 iff row is 2x height */
+#define OSD_BUTTONS      0x30 /* [3:0] = button mask */
 #define OSD_COLUMNS      0x40 /* [6:0] = #columns */
 
 static void ff_osd_process(void)
@@ -161,6 +163,9 @@ static void ff_osd_process(void)
                 lcd_display.cols = min_t(uint16_t, 40, x & 0x3f);
             } else {
                 switch (x & 0xf0) {
+                case OSD_BUTTONS:
+                    ff_osd_buttons = x & 0x0f;
+                    break;
                 case OSD_ROWS:
                     /* 0-3 */
                     lcd_display.rows = x & 0x03;

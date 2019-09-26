@@ -55,8 +55,13 @@ void config_init(void)
 
     config = *flash_config;
     crc = crc16_ccitt(&config, sizeof(config), 0xffff);
-    if (crc)
+    if (crc) {
         config = dfl_config;
+    } else if (gpio_pins_connected(gpioa, 1, gpioa, 2)) {
+        printk("\nA1-A2 Jumpered: Resetting to Factory Defaults\n");
+        config = dfl_config;
+        config_write_flash(&config);
+    }
 
     config_printk(&config);
 
@@ -165,11 +170,9 @@ void config_process(uint8_t b)
                 break;
             case C_DISCARD:
                 config = old_config;
-                slave_arr_update();
                 break;
             case C_RESET:
                 config = dfl_config;
-                slave_arr_update();
                 config_write_flash(&config);
                 break;
             }
@@ -210,10 +213,8 @@ void config_process(uint8_t b)
             config.h_off = max_t(uint16_t, config.h_off-1, 1);
         if (b & B_RIGHT)
             config.h_off = min_t(uint16_t, config.h_off+1, 199);
-        if (b) {
+        if (b)
             cnf_prt(1, "%u", config.h_off);
-            slave_arr_update();
-        }
         break;
     case C_v_off:
         if (changed)
@@ -222,10 +223,8 @@ void config_process(uint8_t b)
             config.v_off = max_t(uint16_t, config.v_off-1, 2);
         if (b & B_RIGHT)
             config.v_off = min_t(uint16_t, config.v_off+1, 299);
-        if (b) {
+        if (b)
             cnf_prt(1, "%u", config.v_off);
-            slave_arr_update();
-        }
         break;
     case C_rows:
         if (changed)
