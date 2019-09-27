@@ -177,8 +177,9 @@ static void button_timer_fn(void *unused)
 static struct display notify;
 static time_t notify_time;
 
+/* Default amiga config states */
 static int kickstart = 3;
-static bool_t output2 = 1;
+static bool_t output2 = 0;
 
 void update_kickstart (bool_t show_banner) {
 
@@ -194,7 +195,7 @@ void update_kickstart (bool_t show_banner) {
         snprintf((char *)notify.text[0], sizeof(notify.text[0]),
                  "Kickstart %d", kickstart+1);
         snprintf((char *)notify.text[1], sizeof(notify.text[1]),
-                 "Output2 %s", output2 ? "HIGH" : "LOW");
+                 "Output2 %s", output2 ? "HIGH" : " LOW");
         notify.cols = max ( strlen((char *)notify.text[0]), strlen((char *)notify.text[1]) );
         notify.rows = 2;
         notify.on = TRUE;
@@ -528,6 +529,9 @@ int main(void)
 
     /* PB10 = uncomitted output2 output */
     gpio_configure_pin(gpio_out2, pin_out2, GPO_opendrain(_2MHz, HIGH));
+
+    /* set kickstart and output2 to default state, no OSD banner */
+    update_kickstart (FALSE);
 
     /* PA3,4,5: Gotek buttons */
     gpio_configure_pin(gpioa, 3, GPO_opendrain(_2MHz, HIGH));
