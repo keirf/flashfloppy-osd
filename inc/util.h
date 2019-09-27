@@ -128,7 +128,8 @@ extern struct config {
     uint16_t h_off, v_off;
     uint16_t min_cols, max_cols;
     uint16_t rows;
-    uint16_t kickstart;
+    uint16_t defaultrom;
+    uint16_t rommode;
     uint16_t output2;
     uint16_t crc16_ccitt;
 } config;

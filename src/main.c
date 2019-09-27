@@ -179,13 +179,20 @@ static time_t notify_time;
 
 /* Default amiga config states */
 static int kickstart = 4;	// range 1..4
-static bool_t output2 = 0;
+static bool_t output2 = 1;
 
 void update_kickstart (bool_t show_banner) {
 
     bool_t bit0, bit1;
-    bit0 = ((kickstart-1) & 0b001) ? HIGH : LOW;
-    bit1 = ((kickstart-1) & 0b010) ? HIGH : LOW;
+    if (config.rommode) { // binary
+        if (kickstart > 4) kickstart = 4;
+        bit0 = ((kickstart-1) & 0b001) ? HIGH : LOW;
+        bit1 = ((kickstart-1) & 0b010) ? HIGH : LOW;
+    } else { // discrete
+        if (kickstart > 2) kickstart = 2;
+        bit0 = ((kickstart-1) & 0b001) ? LOW : HIGH;
+        bit1 = ((kickstart-1) & 0b001) ? HIGH : LOW;
+    }
     gpio_write_pin(gpio_rom0, pin_rom0, bit0);
     gpio_write_pin(gpio_rom1, pin_rom1, bit1);
 
@@ -193,7 +200,7 @@ void update_kickstart (bool_t show_banner) {
 
     if (show_banner) {
         snprintf((char *)notify.text[0], sizeof(notify.text[0]),
-                 "Kickstart %d", kickstart);
+                 "ROM is %d", kickstart);
         snprintf((char *)notify.text[1], sizeof(notify.text[1]),
                  "Output2 %s", output2 ? "HIGH" : " LOW");
         notify.cols = max ( strlen((char *)notify.text[0]), strlen((char *)notify.text[1]) );
@@ -544,7 +551,7 @@ int main(void)
     config_init();
 
     /* set kickstart and output2 to default state, no OSD banner */
-    kickstart = config.kickstart;	// range 1..4
+    kickstart = config.defaultrom;	// range 1..4
     output2 = config.output2;
     update_kickstart (FALSE);
 

@@ -17,8 +17,9 @@ const static struct config dfl_config = {
     .min_cols = 16,
     .max_cols = 40,
     .rows = 2,
-    .kickstart = 4,
-    .output2 = 0,
+    .defaultrom = 4,
+    .rommode = 1,
+    .output2 = 1,
 };
 struct config config;
 
@@ -30,8 +31,9 @@ static void config_printk(const struct config *conf)
     printk(" V.Off: %u\n", conf->v_off);
     printk(" Rows: %u\n", conf->rows);
     printk(" Columns: %u-%u\n", conf->min_cols, conf->max_cols);
-    printk(" Kickstart: %u\n", conf->kickstart);
-    printk(" Output2: %s\n", conf->output2 ? "HIGH" : "LOW");
+    printk(" Default ROM: %u\n", conf->defaultrom);
+    printk(" ROM Mode: %s\n", conf->rommode ? "BINARY" : "DISCRETE");
+    printk(" Default Output2: %s\n", conf->output2 ? "HIGH" : "LOW");
 }
 
 static void config_write_flash(struct config *conf)
@@ -62,10 +64,12 @@ void config_init(void)
     if (crc) {
         config = dfl_config;
         printk("\nConfig corrupt: Resetting to Factory Defaults\n");
+/* disable jumper reset for now
     } else if (gpio_pins_connected(gpioa, 1, gpioa, 2)) {
         printk("\nA1-A2 Jumpered: Resetting to Factory Defaults\n");
         config = dfl_config;
         config_write_flash(&config);
+*/
     }
 
     config_printk(&config);
@@ -92,7 +96,8 @@ static enum {
     C_rows,
     C_min_cols,
     C_max_cols,
-    C_kickstart,
+    C_defaultrom,
+    C_rommode,
     C_output2,
     /* Exit */
     C_save,
@@ -189,7 +194,7 @@ void config_process(uint8_t b)
         }
         if ((config_state == C_rows) && ff_osd_i2c_protocol) {
             /* Skip LCD config options if using the extended OSD protocol. */
-            config_state = C_kickstart;
+            config_state = C_defaultrom;
         }
         config_active = (config_state != C_idle);
         changed = TRUE;
@@ -266,23 +271,34 @@ void config_process(uint8_t b)
         if (b)
             cnf_prt(1, "%u", config.max_cols);
         break;
-    case C_kickstart:
+    case C_defaultrom:
         if (changed)
-            cnf_prt(0, "Kickstart (1-4):");
+            cnf_prt(0, "Default ROM:");
         if (b & B_LEFT)
-            config.kickstart = max_t(uint16_t, config.kickstart-1, 1);
+            config.defaultrom = max_t(uint16_t, config.defaultrom-1, 1);
         if (b & B_RIGHT)
-            config.kickstart = min_t(uint16_t, config.kickstart+1, 4);
+            config.defaultrom = min_t(uint16_t, config.defaultrom+1,
+                                       2*config.rommode+2);
         if (b)
-            cnf_prt(1, "Default %u", config.kickstart);
+            cnf_prt(1, "%u", config.defaultrom);
+        break;
+    case C_rommode:
+        if (changed)
+            cnf_prt(0, "ROM Mode:");
+        if (b & (B_LEFT|B_RIGHT))
+            config.rommode ^= 1;
+        if (b)
+            cnf_prt(1, "%s", config.rommode ? "BINARY" : "DISCRETE");
+        config.defaultrom = min_t(uint16_t, config.defaultrom,
+                                   2*config.rommode+2);
         break;
     case C_output2:
         if (changed)
-            cnf_prt(0, "Output2:");
+            cnf_prt(0, "Default Output2:");
         if (b & (B_LEFT|B_RIGHT))
             config.output2 ^= 1;
         if (b)
-            cnf_prt(1, "Default %s", config.output2 ? "HIGH" : "LOW");
+            cnf_prt(1, "%s", config.output2 ? "HIGH" : "LOW");
         break;
     case C_save: {
         const static char *str[] = { "Save", "Use",
