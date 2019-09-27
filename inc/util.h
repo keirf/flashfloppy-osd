@@ -115,19 +115,6 @@ extern struct display lcd_display;
 extern bool_t ff_osd_i2c_protocol;
 extern uint8_t ff_osd_buttons;
 
-/* Configuration. */
-void config_init(void);
-void config_process(uint8_t b);
-extern struct config {
-    uint16_t polarity;
-    uint16_t h_off, v_off;
-    uint16_t min_cols, max_cols;
-    uint16_t rows;
-    uint16_t crc16_ccitt;
-} config;
-extern bool_t config_active;
-extern struct display config_display;
-
 /* Build info. */
 extern const char fw_ver[];
 

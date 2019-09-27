@@ -15,4 +15,4 @@
 |12 |  Y |               |  Y |                  |
 |13 |  Y | **NA** (SWDIO)|  Y |                  |
 |14 |  Y | **NA** (SWCLK)|  Y | VSYNC            |
-|15 |  Y |               |  Y | Disp.Out. (RGB)  |
+|15 |  Y | Disp.Enable   |  Y | Disp.Out. (RGB)  |

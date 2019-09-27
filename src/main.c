@@ -39,6 +39,7 @@
  *  A8: CSYNC or HSYNC
  *  B14: VSYNC (only needed with HSYNC)
  *  B15: Display output
+ *  A15: Display enable
  * 
  * Amiga keyboard:
  *  B3: KBDAT
@@ -90,6 +91,10 @@ void IRQ_28(void) __attribute__((alias("IRQ_osd_pre_start")));
 #define dma_display  (dma1->ch5)
 #define dma_display_ch 5
 #define dma_display_irq 15
+
+/* Display Enable (A15): If using an external tristate buffer. */
+#define gpio_dispen gpioa
+#define pin_dispen  15
 
 /* List of interrupts used by the display-sync and -output system. */
 const static uint8_t irqs[] = {
@@ -271,9 +276,45 @@ static void IRQ_csync(void)
     }
 }
 
-#define OSD_OFF 0
-#define OSD_ON 1
-static uint32_t gpio_display_crh[2]; /* OSD_??? */
+/* Display On/Off: Which register to write, and what values to write there. */
+static uint32_t dispctl_reg;
+static uint32_t dispctl_on;
+static uint32_t dispctl_off;
+
+/* Called during initialisation to set the display-control variables based on 
+ * configured display-control mode. */
+static void setup_dispctl_mode(void)
+{
+    switch (config.dispctl_mode) {
+
+    case DISPCTL_tristate:
+        /* PA15: Unused 
+         * PB15: Tristate outside OSD box */
+        gpio_configure_pin(gpio_display, pin_display, GPI_floating);
+        dispctl_reg = (uint32_t)(unsigned long)&gpio_display->crh;
+        gpio_configure_pin(gpio_display, pin_display, AFO_pushpull(_50MHz));
+        dispctl_on = gpio_display->crh;
+        gpio_configure_pin(gpio_display, pin_display, GPI_floating);
+        dispctl_off = gpio_display->crh;
+        break;
+
+    case DISPCTL_enable_high:
+    case DISPCTL_enable_low: {
+        /* PA15: Display Enable: Active HIGH or LOW 
+         * PB15: Always driven */
+        bool_t active_low = (config.dispctl_mode == DISPCTL_enable_low);
+        gpio_configure_pin(gpio_display, pin_display, AFO_pushpull(_50MHz));
+        gpio_configure_pin(gpio_dispen, pin_dispen,
+                           GPO_pushpull(_50MHz, active_low));
+        dispctl_reg = (uint32_t)(unsigned long)&gpio_dispen->bsrr;
+        dispctl_on = 1u << (pin_dispen + (active_low ? 16 : 0));
+        dispctl_off = 1u << (pin_dispen + (active_low ? 0 : 16));
+        break;
+    }
+
+    }
+}
+
 static uint16_t dma_display_ccr = (DMA_CCR_PL_V_HIGH |
                                    DMA_CCR_MSIZE_16BIT |
                                    DMA_CCR_PSIZE_16BIT |
@@ -453,9 +494,6 @@ int main(void)
     /* PB14 = VSYNC input */
     gpio_configure_pin(gpio_vsync, pin_vsync, GPI_pull_up);
 
-    /* PB15 = Colour output */
-    gpio_configure_pin(gpio_display, pin_display, GPI_floating);
-
     /* PA3,4,5: Gotek buttons */
     gpio_configure_pin(gpioa, 3, GPO_opendrain(_2MHz, HIGH));
     gpio_configure_pin(gpioa, 4, GPO_opendrain(_2MHz, HIGH));
@@ -499,13 +537,10 @@ int main(void)
     setup_slave_timer(tim2);
 
     /* Timer 3 is triggered by Timer 1. On overflow it triggers DMA 
-     * to switch on the SPI output pin. */
-    gpio_configure_pin(gpio_display, pin_display, AFO_pushpull(_50MHz));
-    gpio_display_crh[OSD_ON] = gpio_display->crh;
-    gpio_configure_pin(gpio_display, pin_display, GPI_floating);
-    gpio_display_crh[OSD_OFF] = gpio_display->crh;
-    tim3_up_dma.cpar = (uint32_t)(unsigned long)&gpio_display->crh;
-    tim3_up_dma.cmar = (uint32_t)(unsigned long)&gpio_display_crh[OSD_ON];
+     * to enable the OSD box. */
+    setup_dispctl_mode();
+    tim3_up_dma.cpar = dispctl_reg;
+    tim3_up_dma.cmar = (uint32_t)(unsigned long)&dispctl_on;
     tim3_up_dma.cndtr = 1;
     tim3_up_dma.ccr = (DMA_CCR_PL_V_HIGH |
                        DMA_CCR_MSIZE_32BIT |
@@ -530,8 +565,8 @@ int main(void)
     tim1->ccer = TIM_CCER_CC1E;
 
     /* Timer 1 Channel 3 is used to disable the OSD box. */
-    tim1_ch3_dma.cpar = (uint32_t)(unsigned long)&gpio_display->crh;
-    tim1_ch3_dma.cmar = (uint32_t)(unsigned long)&gpio_display_crh[OSD_OFF];
+    tim1_ch3_dma.cpar = dispctl_reg;
+    tim1_ch3_dma.cmar = (uint32_t)(unsigned long)&dispctl_off;
     tim1_ch3_dma.cndtr = 1;
     tim1_ch3_dma.ccr = (DMA_CCR_PL_V_HIGH |
                         DMA_CCR_MSIZE_32BIT |

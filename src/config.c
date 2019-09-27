@@ -16,6 +16,7 @@ const static struct config dfl_config = {
     .v_off = 50,
     .min_cols = 16,
     .max_cols = 40,
+    .dispctl_mode = DISPCTL_tristate,
     .rows = 2,
 };
 struct config config;
