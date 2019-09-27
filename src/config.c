@@ -17,6 +17,8 @@ const static struct config dfl_config = {
     .min_cols = 16,
     .max_cols = 40,
     .rows = 2,
+    .kickstart = 4,
+    .output2 = 0,
 };
 struct config config;
 
@@ -28,6 +30,8 @@ static void config_printk(const struct config *conf)
     printk(" V.Off: %u\n", conf->v_off);
     printk(" Rows: %u\n", conf->rows);
     printk(" Columns: %u-%u\n", conf->min_cols, conf->max_cols);
+    printk(" Kickstart: %u\n", conf->kickstart);
+    printk(" Output2: %s\n", conf->output2 ? "HIGH" : "LOW");
 }
 
 static void config_write_flash(struct config *conf)
@@ -57,6 +61,7 @@ void config_init(void)
     crc = crc16_ccitt(&config, sizeof(config), 0xffff);
     if (crc) {
         config = dfl_config;
+        printk("\nConfig corrupt: Resetting to Factory Defaults\n");
     } else if (gpio_pins_connected(gpioa, 1, gpioa, 2)) {
         printk("\nA1-A2 Jumpered: Resetting to Factory Defaults\n");
         config = dfl_config;
@@ -87,6 +92,8 @@ static enum {
     C_rows,
     C_min_cols,
     C_max_cols,
+    C_kickstart,
+    C_output2,
     /* Exit */
     C_save,
     C_max
@@ -182,7 +189,7 @@ void config_process(uint8_t b)
         }
         if ((config_state == C_rows) && ff_osd_i2c_protocol) {
             /* Skip LCD config options if using the extended OSD protocol. */
-            config_state = C_save;
+            config_state = C_kickstart;
         }
         config_active = (config_state != C_idle);
         changed = TRUE;
@@ -258,6 +265,24 @@ void config_process(uint8_t b)
                                 80 / config.rows);
         if (b)
             cnf_prt(1, "%u", config.max_cols);
+        break;
+    case C_kickstart:
+        if (changed)
+            cnf_prt(0, "Kickstart (1-4):");
+        if (b & B_LEFT)
+            config.kickstart = max_t(uint16_t, config.kickstart-1, 1);
+        if (b & B_RIGHT)
+            config.kickstart = min_t(uint16_t, config.kickstart+1, 4);
+        if (b)
+            cnf_prt(1, "Default %u", config.kickstart);
+        break;
+    case C_output2:
+        if (changed)
+            cnf_prt(0, "Output2:");
+        if (b & (B_LEFT|B_RIGHT))
+            config.output2 ^= 1;
+        if (b)
+            cnf_prt(1, "Default %s", config.output2 ? "HIGH" : "LOW");
         break;
     case C_save: {
         const static char *str[] = { "Save", "Use",

@@ -178,14 +178,14 @@ static struct display notify;
 static time_t notify_time;
 
 /* Default amiga config states */
-static int kickstart = 3;
+static int kickstart = 4;	// range 1..4
 static bool_t output2 = 0;
 
 void update_kickstart (bool_t show_banner) {
 
     bool_t bit0, bit1;
-    bit0 = (kickstart & 0b001) ? HIGH : LOW;
-    bit1 = (kickstart & 0b010) ? HIGH : LOW;
+    bit0 = ((kickstart-1) & 0b001) ? HIGH : LOW;
+    bit1 = ((kickstart-1) & 0b010) ? HIGH : LOW;
     gpio_write_pin(gpio_rom0, pin_rom0, bit0);
     gpio_write_pin(gpio_rom1, pin_rom1, bit1);
 
@@ -193,7 +193,7 @@ void update_kickstart (bool_t show_banner) {
 
     if (show_banner) {
         snprintf((char *)notify.text[0], sizeof(notify.text[0]),
-                 "Kickstart %d", kickstart+1);
+                 "Kickstart %d", kickstart);
         snprintf((char *)notify.text[1], sizeof(notify.text[1]),
                  "Output2 %s", output2 ? "HIGH" : " LOW");
         notify.cols = max ( strlen((char *)notify.text[0]), strlen((char *)notify.text[1]) );
@@ -426,27 +426,27 @@ static void update_amiga_keys(void)
     if (amiga_key_pressed(AMI_UP)) keys |= K_SELECT;
     if (amiga_key_pressed(AMI_HELP)) keys |= K_MENU;
     if (amiga_key_pressed(AMI_F1)) {
-        kickstart = 0;
-        update_kickstart(TRUE);
-    }
-    if (amiga_key_pressed(AMI_F2)) {
         kickstart = 1;
         update_kickstart(TRUE);
     }
-    if (amiga_key_pressed(AMI_F3)) {
+    if (amiga_key_pressed(AMI_F2)) {
         kickstart = 2;
         update_kickstart(TRUE);
     }
-    if (amiga_key_pressed(AMI_F4)) {
+    if (amiga_key_pressed(AMI_F3)) {
         kickstart = 3;
         update_kickstart(TRUE);
     }
+    if (amiga_key_pressed(AMI_F4)) {
+        kickstart = 4;
+        update_kickstart(TRUE);
+    }
     if (amiga_key_pressed(AMI_F9)) {
-        output2 = 0;
+        output2 = LOW;
         update_kickstart(TRUE);
     }
     if (amiga_key_pressed(AMI_F10)) {
-        output2 = 1;
+        output2 = HIGH;
         update_kickstart(TRUE);
     }
 }
@@ -530,9 +530,6 @@ int main(void)
     /* PB10 = uncomitted output2 output */
     gpio_configure_pin(gpio_out2, pin_out2, GPO_opendrain(_2MHz, HIGH));
 
-    /* set kickstart and output2 to default state, no OSD banner */
-    update_kickstart (FALSE);
-
     /* PA3,4,5: Gotek buttons */
     gpio_configure_pin(gpioa, 3, GPO_opendrain(_2MHz, HIGH));
     gpio_configure_pin(gpioa, 4, GPO_opendrain(_2MHz, HIGH));
@@ -545,6 +542,12 @@ int main(void)
     rcc->apb2enr |= RCC_APB2ENR_TIM1EN;
 
     config_init();
+
+    /* set kickstart and output2 to default state, no OSD banner */
+    kickstart = config.kickstart;	// range 1..4
+    output2 = config.output2;
+    update_kickstart (FALSE);
+
 
     /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     spi_display->cr2 = SPI_CR2_TXDMAEN;
