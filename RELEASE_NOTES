@@ -3,6 +3,14 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.5 - 28 September 2019
+ - Fix Rotary Encoder support (broken in v1.4)
+ - Amiga: L.Ctrl+L.Alt+Del toggles OSD on/off
+ - Compile-time options:
+   - Amiga hotkeys F1-F10 can control pins B8-B10
+   - Switch ROMs, switch Gotek DF0/DF1, switch PAL/NTSC, ...
+   - Support external video buffer via Output Enable at A15
+
 ** v1.4 - 25 September 2019
  - Further improvements to display stability
  - Support Gotek buttons for OSD configuration
