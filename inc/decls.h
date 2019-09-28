@@ -15,11 +15,11 @@
 #include <stddef.h>
 
 #include "util.h"
-#include "config.h"
 #include "stm32f10x_regs.h"
 #include "stm32f10x.h"
 #include "intrinsics.h"
 
+#include "config.h"
 #include "cancellation.h"
 #include "time.h"
 #include "timer.h"

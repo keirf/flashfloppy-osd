@@ -9,16 +9,13 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+#define F(x) (x-1)
+#define U(x) (1u<<x)
+
 const static struct config *flash_config = (struct config *)0x0800fc00;
-const static struct config dfl_config = {
-    .polarity = FALSE,
-    .h_off = 42,
-    .v_off = 50,
-    .min_cols = 16,
-    .max_cols = 40,
-    .dispctl_mode = DISPCTL_tristate,
-    .rows = 2,
-};
+
+#include "default_config.c"
+
 struct config config;
 
 static void config_printk(const struct config *conf)
@@ -57,6 +54,7 @@ void config_init(void)
     config = *flash_config;
     crc = crc16_ccitt(&config, sizeof(config), 0xffff);
     if (crc) {
+        printk("\nConfig corrupt: Resetting to Factory Defaults\n");
         config = dfl_config;
     } else if (gpio_pins_connected(gpioa, 1, gpioa, 2)) {
         printk("\nA1-A2 Jumpered: Resetting to Factory Defaults\n");

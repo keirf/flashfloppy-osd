@@ -44,6 +44,11 @@
  * Amiga keyboard:
  *  B3: KBDAT
  *  B4: KBCLK
+ * 
+ * User outputs:
+ *  B8:  U0
+ *  B9:  U1
+ *  B10: U2
  */
 
 /* CSYNC/HSYNC (A8): EXTI IRQ trigger and TIM1 Ch.1 trigger. */
@@ -95,6 +100,10 @@ void IRQ_28(void) __attribute__((alias("IRQ_osd_pre_start")));
 /* Display Enable (A15): If using an external tristate buffer. */
 #define gpio_dispen gpioa
 #define pin_dispen  15
+
+/* User outputs are PB8 upwards. */
+#define gpio_user gpiob
+#define pin_u0 8
 
 /* List of interrupts used by the display-sync and -output system. */
 const static uint8_t irqs[] = {
@@ -408,6 +417,10 @@ static void render_line(int y, const struct display *display)
     }
 }
 
+/* Keypress action notifier. */
+static struct display notify;
+static time_t notify_time;
+
 /* We snapshot the relevant Amiga keys so that we can scan the keymap (and 
  * clear the sticky bits) in one place in the main loop. */
 static uint8_t keys;
@@ -418,11 +431,34 @@ static uint8_t keys;
 
 static void update_amiga_keys(void)
 {
+    int i;
+
+    /* Check keys-as-buttons. */
     keys = 0;
     if (amiga_key_pressed(AMI_LEFT)) keys |= K_LEFT;
     if (amiga_key_pressed(AMI_RIGHT)) keys |= K_RIGHT;
     if (amiga_key_pressed(AMI_UP)) keys |= K_SELECT;
     if (amiga_key_pressed(AMI_HELP)) keys |= K_MENU;
+
+    /* Check hotkeys. */
+    for (i = 0; i < ARRAY_SIZE(config.hotkey); i++) {
+        struct config_hotkey *hk = &config.hotkey[i];
+        uint32_t s, r;
+        if (hk->pin_mod == 0)
+            continue;
+        if (!amiga_key_pressed(AMI_F(i+1)))
+            continue;
+        s = (uint16_t)hk->pin_high << pin_u0;
+        r = (uint16_t)(hk->pin_mod & ~hk->pin_high) << pin_u0;
+        gpio_user->bsrr = ((uint32_t)r << 16) | s;
+        if (hk->str[0]) {
+            strcpy((char *)notify.text[0], hk->str);
+            notify.cols = strlen(hk->str);
+            notify.rows = 1;
+            notify.on = TRUE;
+            notify_time = time_now();
+        }
+    }
 }
 
 struct gotek_button {
@@ -457,9 +493,6 @@ static void emulate_gotek_buttons(void)
     emulate_gotek_button(K_RIGHT, &gr, 4);
     emulate_gotek_button(K_SELECT, &gs, 5);
 }
-
-static struct display notify;
-static time_t notify_time;
 
 int main(void)
 {
@@ -506,6 +539,17 @@ int main(void)
     rcc->apb2enr |= RCC_APB2ENR_TIM1EN;
 
     config_init();
+
+    /* Set user pin output modes and initial logic levels. */
+    for (i = 0; i < 3; i++) {
+        bool_t level = (config.user_pin_high >> i) & 1;
+        if (config.user_pin_opendrain & (1u<<i))
+            gpio_configure_pin(gpio_user, pin_u0+i,
+                               GPO_opendrain(_2MHz, level));
+        if (config.user_pin_pushpull & (1u<<i))
+            gpio_configure_pin(gpio_user, pin_u0+i,
+                               GPO_pushpull(_2MHz, level));
+    }
 
     /* Configure SPI: 8-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     spi_display->cr2 = SPI_CR2_TXDMAEN;
