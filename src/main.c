@@ -429,9 +429,12 @@ static uint8_t keys;
 #define K_SELECT B_SELECT
 #define K_MENU   8
 
+static bool_t osd_on = TRUE;
+
 static void update_amiga_keys(void)
 {
     int i;
+    static bool_t del_pressed;
 
     /* Check keys-as-buttons. */
     keys = 0;
@@ -439,6 +442,17 @@ static void update_amiga_keys(void)
     if (amiga_key_pressed(AMI_RIGHT)) keys |= K_RIGHT;
     if (amiga_key_pressed(AMI_UP)) keys |= K_SELECT;
     if (amiga_key_pressed(AMI_HELP)) keys |= K_MENU;
+
+    /* OSD On/Off. */
+    if ((del_pressed ^ amiga_key_pressed(AMI_DEL)) && (del_pressed ^= 1)) {
+        osd_on ^= 1;
+        snprintf((char *)notify.text[0], sizeof(notify.text[0]),
+                 "OSD O%s", osd_on ? "n" : "ff");
+        notify.cols = strlen((char *)notify.text[0]);
+        notify.rows = 1;
+        notify.on = TRUE;
+        notify_time = time_now();
+    }
 
     /* Check hotkeys. */
     for (i = 0; i < ARRAY_SIZE(config.hotkey); i++) {
@@ -493,6 +507,8 @@ static void emulate_gotek_buttons(void)
     emulate_gotek_button(K_RIGHT, &gr, 4);
     emulate_gotek_button(K_SELECT, &gs, 5);
 }
+
+static struct display no_display;
 
 int main(void)
 {
@@ -701,7 +717,8 @@ int main(void)
             frame = 0;
 
             /* Work out what to display next frame. */
-            cur_display = config_active ? &config_display : &lcd_display;
+            cur_display = config_active ? &config_display
+                : osd_on ? &lcd_display : &no_display;
             if (notify.on) {
                 if (time_diff(notify_time, time_now()) > time_ms(2000)) {
                     notify.on = FALSE;

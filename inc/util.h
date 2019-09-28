@@ -80,6 +80,7 @@ int printk(const char *format, ...)
 /* Amiga keyboard */
 #define AMI_RETURN 0x44
 #define AMI_F(x)   (0x4f+(x))
+#define AMI_DEL    0x46
 #define AMI_HELP   0x5f
 #define AMI_L_CTRL 0x63
 #define AMI_L_ALT  0x64
