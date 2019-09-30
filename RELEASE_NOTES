@@ -3,6 +3,11 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.6 - 30 September 2019
+ - I2C: Fix FF-OSD extended protocol handling
+   - No more phantom button presses
+ - Amiga: Clear keymap on C-A-A reset
+
 ** v1.5 - 28 September 2019
  - Fix Rotary Encoder support (broken in v1.4)
  - Amiga: L.Ctrl+L.Alt+Del toggles OSD on/off
