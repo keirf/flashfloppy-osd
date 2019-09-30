@@ -103,6 +103,13 @@ static void IRQ_amikbd_clk(void)
         }
     }
 
+    keycode |= !bit << 7;
+    if (keycode == 0xfd) {
+        /* 0xFD: "Initiate power-up key stream".
+         * Clear the keymap as all pressed keys are being re-sent. */
+        memset(keymap, 0, sizeof(keymap));
+    }
+
     /* Acknowledge the byte (some games and demos have no keyboard handler). */
     handshake();
 }
