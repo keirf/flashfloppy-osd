@@ -36,8 +36,13 @@ void IRQ_32(void) __attribute__((alias("IRQ_i2c_error")));
 void IRQ_31(void) __attribute__((alias("IRQ_i2c_event")));
 
 /* I2C data ring. */
-static uint8_t ring[1024];
-static uint16_t ring_cons, ring_prod;
+static uint8_t d_ring[1024];
+static uint16_t d_cons, d_prod;
+#define MASK(r,x) ((x) & (ARRAY_SIZE(r)-1))
+
+/* Transaction ring: Data-ring offset of each transaction start. */
+static uint16_t t_ring[8];
+static uint16_t t_cons, t_prod;
 
 static bool_t lcd_inc;
 static uint8_t lcd_ddraddr;
@@ -60,7 +65,7 @@ static void IRQ_i2c_event(void)
     if (sr1 & I2C_SR1_ADDR) {
         /* Read SR2 clears SR1_ADDR. */
         (void)i2c->sr2;
-        ff_osd_y = 0;
+        t_ring[MASK(t_ring, t_prod++)] = d_prod;
     }
 
     if (sr1 & I2C_SR1_STOPF) {
@@ -70,8 +75,7 @@ static void IRQ_i2c_event(void)
 
     if (sr1 & I2C_SR1_RXNE) {
         /* Read DR clear SR1_RXNE. */
-        ring[ring_prod] = i2c->dr;
-        ring_prod = (ring_prod + 1) & (ARRAY_SIZE(ring) - 1);
+        d_ring[MASK(d_ring, d_prod++)] = i2c->dr;
     }
 }
 
@@ -142,12 +146,34 @@ static void process_dat(uint8_t dat)
 
 static void ff_osd_process(void)
 {
-    const uint16_t buf_mask = ARRAY_SIZE(ring) - 1;
-    uint16_t c, p = ring_prod;
+    uint16_t d_c, d_p, t_c, t_p;
+
+    d_c = d_cons;
+    d_p = d_prod;
+    barrier(); /* Get data ring producer /then/ transaction ring producer */
+    t_c = t_cons;
+    t_p = t_prod;
+
+    /* We only care about the last full transaction, and newer. */
+    if ((uint16_t)(t_p - t_c) >= 2) {
+        /* Discard older transactions, and in-progress old transaction. */
+        t_c = t_p - 2;
+        d_c = t_ring[MASK(t_ring, t_c)];
+        ff_osd_y = 0;
+    }
+
+    /* Data ring should not be more than half full. We don't want it to 
+     * overrun during the processing loop below: That should be impossible
+     * with half a ring free. */
+    ASSERT((uint16_t)(d_p - d_c) < (ARRAY_SIZE(d_ring)/2));
 
     /* Process the command sequence. */
-    for (c = ring_cons; c != p; c = (c+1) & buf_mask) {
-        uint8_t x = ring[c];
+    for (; d_c != d_p; d_c++) {
+        uint8_t x = d_ring[MASK(d_ring, d_c)];
+        if ((t_c != t_p) && (d_c == t_ring[MASK(t_ring, t_c)])) {
+            t_c++;
+            ff_osd_y = 0;
+        }
         if (ff_osd_y != 0) {
             /* Character Data. */
             lcd_display.text[ff_osd_y-1][ff_osd_x] = x;
@@ -191,13 +217,13 @@ static void ff_osd_process(void)
         }
     }
 
-    ring_cons = c;
+    d_cons = d_c;
+    t_cons = t_c;
 }
 
 void lcd_process(void)
 {
-    const uint16_t buf_mask = ARRAY_SIZE(ring) - 1;
-    uint16_t c, p = ring_prod;
+    uint16_t d_c, d_p = d_prod;
     static uint16_t dat = 1;
     static bool_t rs;
 
@@ -205,8 +231,8 @@ void lcd_process(void)
         return ff_osd_process();
 
     /* Process the command sequence. */
-    for (c = ring_cons; c != p; c = (c+1) & buf_mask) {
-        uint8_t x = ring[c];
+    for (d_c = d_cons; d_c != d_p; d_c++) {
+        uint8_t x = d_ring[MASK(d_ring, d_c)];
         if ((x & (_EN|_RW)) != _EN)
             continue;
         lcd_display.on = !!(x & _BL);
@@ -225,7 +251,7 @@ void lcd_process(void)
         }
     }
 
-    ring_cons = c;
+    d_cons = d_c;
 }
 
 void lcd_init(void)
