@@ -457,11 +457,21 @@ static void update_amiga_keys(void)
     /* Check hotkeys. */
     for (i = 0; i < ARRAY_SIZE(config.hotkey); i++) {
         struct config_hotkey *hk = &config.hotkey[i];
+        static uint16_t hk_latch;
+        bool_t hk_pressed;
         uint32_t s, r;
+        /* Unused hotkey? */
         if (hk->pin_mod == 0)
             continue;
-        if (!amiga_key_pressed(AMI_F(i+1)))
+        /* Has hotkey press/release state changed? */
+        hk_pressed = amiga_key_pressed(AMI_F(i+1));
+        if (!((hk_latch>>i & 1) ^ hk_pressed))
             continue;
+        /* State has changed: Is the hotkey now pressed? */
+        hk_latch ^= 1u << i;
+        if (!hk_pressed)
+            continue;
+        /* Hotkey is now pressed: Perform configured action. */
         s = (uint16_t)hk->pin_high << pin_u0;
         r = (uint16_t)(hk->pin_mod & ~hk->pin_high) << pin_u0;
         gpio_user->bsrr = ((uint32_t)r << 16) | s;
