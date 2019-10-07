@@ -32,13 +32,14 @@ dist: all
 endif
 
 BAUD=921600
+DEV=/dev/ttyUSB1
 
 flash: all
 	sudo ~/stm32flash/stm32flash -b $(BAUD) \
-	-vw src/$(PROJ).hex /dev/ttyUSB0
+	-vw src/$(PROJ).hex $(DEV)
 
 start:
-	sudo ~/stm32flash/stm32flash -b $(BAUD) -g 0 /dev/ttyUSB0
+	sudo ~/stm32flash/stm32flash -b $(BAUD) -g 0 $(DEV)
 
 serial:
-	sudo miniterm.py /dev/ttyUSB0 115200
+	sudo miniterm.py $(DEV) 115200

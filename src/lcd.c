@@ -47,11 +47,12 @@ static uint16_t t_cons, t_prod;
 static bool_t lcd_inc;
 static uint8_t lcd_ddraddr;
 struct display lcd_display;
-uint8_t ff_osd_buttons;
+uint8_t i2c_buttons_rx;
+struct i2c_osd_info i2c_osd_info;
 
-/* I2C Error ISR: As slave with clock stretc we can only receive:
+/* I2C Error ISR: As slave with clock stretch we can only receive:
  *  Bus error (BERR): Peripheral automatically recovers
- *  Arbitration lost (ARLO): Peripheral automatically recovers */
+ *  Acknowledge Failure (AF): Peripheral automatically recovers */
 static void IRQ_i2c_error(void)
 {
     /* Clear I2C errors. Nothing else needs to be done. */
@@ -60,12 +61,15 @@ static void IRQ_i2c_error(void)
 
 static void IRQ_i2c_event(void)
 {
+    static uint8_t rp;
     uint16_t sr1 = i2c->sr1;
 
     if (sr1 & I2C_SR1_ADDR) {
         /* Read SR2 clears SR1_ADDR. */
-        (void)i2c->sr2;
-        t_ring[MASK(t_ring, t_prod++)] = d_prod;
+        uint16_t sr2 = i2c->sr2;
+        if (!(sr2 & I2C_SR2_TRA))
+            t_ring[MASK(t_ring, t_prod++)] = d_prod;
+        rp = 0;
     }
 
     if (sr1 & I2C_SR1_STOPF) {
@@ -74,8 +78,14 @@ static void IRQ_i2c_event(void)
     }
 
     if (sr1 & I2C_SR1_RXNE) {
-        /* Read DR clear SR1_RXNE. */
+        /* Read DR clears SR1_RXNE. */
         d_ring[MASK(d_ring, d_prod++)] = i2c->dr;
+    }
+
+    if (sr1 & I2C_SR1_TXE) {
+        /* Write DR clears SR1_TXE. */
+        uint8_t *info = (uint8_t *)&i2c_osd_info;
+        i2c->dr = (rp < sizeof(i2c_osd_info)) ? info[rp++] : 0;
     }
 }
 
@@ -190,7 +200,7 @@ static void ff_osd_process(void)
             } else {
                 switch (x & 0xf0) {
                 case OSD_BUTTONS:
-                    ff_osd_buttons = x & 0x0f;
+                    i2c_buttons_rx = x & 0x0f;
                     break;
                 case OSD_ROWS:
                     /* 0-3 */
@@ -256,6 +266,12 @@ void lcd_process(void)
 
 void lcd_init(void)
 {
+    char *p;
+
+    i2c_osd_info.protocol_ver = 0;
+    i2c_osd_info.fw_major = strtol(fw_ver, &p, 10);
+    i2c_osd_info.fw_minor = strtol(p+1, NULL, 10);
+
     rcc->apb1enr |= RCC_APB1ENR_I2C1EN;
 
     gpio_configure_pin(gpiob, SCL, AFO_opendrain(_2MHz));

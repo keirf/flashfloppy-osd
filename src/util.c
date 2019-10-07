@@ -98,6 +98,68 @@ int tolower(int c)
     return c;
 }
 
+int isspace(int c)
+{
+    return (c == ' ') || (c == '\t') || (c == '\n') || (c == '\r')
+        || (c == '\f') || (c == '\v');
+}
+
+long int strtol(const char *nptr, char **endptr, int base)
+{
+    long int val = 0;
+    const char *p = nptr;
+    bool_t is_neg = FALSE;
+    int c;
+
+    /* Optional whitespace prefix. */
+    while (isspace(*p))
+        p++;
+    c = tolower(*p);
+
+    /* Optional sign prefix: +, -. */
+    if ((c == '+') || (c == '-')) {
+        is_neg = (c == '-');
+        c = tolower(*++p);
+    }
+
+    /* Optional base prefix: 0, 0x. */
+    if (c == '0') {
+        if (base == 0)
+            base = 8;
+        c = tolower(*++p);
+        if (c == 'x') {
+            if (base == 0)
+                base = 16;
+            if (base != 16)
+                goto out;
+            c = tolower(*++p);
+        }
+    }
+
+    if (base == 0)
+        base = 10;
+
+    /* Digits. */
+    for (;;) {
+        /* Convert c to a digit [0123456789abcdefghijklmnopqrstuvwxyz]. */
+        if ((c >= '0') && (c <= '9'))
+            c -= '0';
+        else if ((c >= 'a') && (c <= 'z'))
+            c -= 'a' - 10;
+        else
+            break;
+        if (c >= base)
+            break;
+        val = (val * base) + c;
+        c = tolower(*++p);
+    }
+
+out:
+    if (endptr)
+        *endptr = (char *)p;
+    return is_neg ? -val : val;
+}
+
 const static uint16_t crc16_ccitt_table[] = {
     0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
     0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,

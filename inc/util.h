@@ -53,6 +53,9 @@ int strncmp(const char *s1, const char *s2, size_t n);
 char *strcpy(char *dest, const char *src);
 char *strrchr(const char *s, int c);
 int tolower(int c);
+int isspace(int c);
+
+long int strtol(const char *nptr, char **endptr, int base);
 
 uint16_t crc16_ccitt(const void *buf, size_t len, uint16_t crc);
 
@@ -114,7 +117,12 @@ void lcd_init(void);
 void lcd_process(void);
 extern struct display lcd_display;
 extern bool_t ff_osd_i2c_protocol;
-extern uint8_t ff_osd_buttons;
+extern uint8_t i2c_buttons_rx; /* Gotek -> FF_OSD */
+extern struct __packed i2c_osd_info {
+    uint8_t protocol_ver;
+    uint8_t fw_major, fw_minor;
+    uint8_t buttons;
+} i2c_osd_info;
 
 /* Build info. */
 extern const char fw_ver[];

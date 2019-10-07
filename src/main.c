@@ -491,6 +491,7 @@ struct gotek_button {
 } gl, gr, gs;
 
 static bool_t gotek_active;
+
 static void emulate_gotek_button(
     uint8_t keycode, struct gotek_button *button, int pin)
 {
@@ -509,6 +510,7 @@ static void emulate_gotek_button(
 
 static void emulate_gotek_buttons(void)
 {
+    uint8_t b = 0;
     if (config_active)
         gotek_active = FALSE;
     else if (!gotek_active && !keys)
@@ -516,6 +518,10 @@ static void emulate_gotek_buttons(void)
     emulate_gotek_button(K_LEFT, &gl, 3);
     emulate_gotek_button(K_RIGHT, &gr, 4);
     emulate_gotek_button(K_SELECT, &gs, 5);
+    if (gl.pressed) b |= B_LEFT;
+    if (gr.pressed) b |= B_RIGHT;
+    if (gs.pressed) b |= B_SELECT;
+    *(volatile uint8_t *)&i2c_osd_info.buttons = b;
 }
 
 static struct display no_display;
@@ -783,7 +789,7 @@ int main(void)
                 if (keys & K_MENU) b |= B_SELECT;
             }
             /* Fold in button presses remoted via I2C. */
-            b |= ff_osd_buttons;
+            b |= i2c_buttons_rx;
             /* Pass button presses to config subsystem for processing. */
             config_process(b & ~B_PROCESSED);
         }
