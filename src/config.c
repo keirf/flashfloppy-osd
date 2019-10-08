@@ -39,8 +39,8 @@ static void config_write_flash(struct config *conf)
 
 static void lcd_display_update(void)
 {
-    lcd_display.rows = config.rows;
-    lcd_display.cols = config.min_cols;
+    i2c_display.rows = config.rows;
+    i2c_display.cols = config.min_cols;
 }
 
 void config_init(void)
@@ -179,7 +179,7 @@ void config_process(uint8_t b)
             config_printk(&config);
             lcd_display_update();
         }
-        if ((config_state == C_rows) && ff_osd_i2c_protocol) {
+        if ((config_state == C_rows) && i2c_osd_protocol) {
             /* Skip LCD config options if using the extended OSD protocol. */
             config_state = C_save;
         }

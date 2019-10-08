@@ -112,9 +112,6 @@ const static uint8_t irqs[] = {
 
 int EXC_reset(void) __attribute__((alias("main")));
 
-/* Are we using the FF OSD custom I2C protocol? */
-bool_t ff_osd_i2c_protocol;
-
 #include "font.h"
 
 /* Guard the stacks with known values. */
@@ -166,7 +163,7 @@ static void button_timer_fn(void *unused)
     uint8_t b = B_PROCESSED;
 
     /* Rotary Encoder is not supported with FF OSD custom I2C protocol. */
-    if (!ff_osd_i2c_protocol)
+    if (!i2c_osd_protocol)
         b |= get_buttons();
 
     /* Latch final button state and reset the timer. */
@@ -181,7 +178,7 @@ static int hline, frame;
 
 #define MAX_DISPLAY_HEIGHT 52
 static uint16_t display_dat[MAX_DISPLAY_HEIGHT][40/2+1];
-static struct display *cur_display = &lcd_display;
+static struct display *cur_display = &i2c_display;
 static uint16_t display_height;
 
 static void slave_arr_update(void)
@@ -549,9 +546,7 @@ int main(void)
     stm32_init();
     time_init();
     console_init();
-
-    ff_osd_i2c_protocol = gpio_pins_connected(gpioa, 0, gpioa, 1);
-    lcd_init();
+    i2c_init();
 
     /* PC13: Blue Pill Indicator LED (Active Low) */
     gpio_configure_pin(gpioc, 13, GPI_pull_up);
@@ -744,7 +739,7 @@ int main(void)
 
             /* Work out what to display next frame. */
             cur_display = config_active ? &config_display
-                : osd_on ? &lcd_display : &no_display;
+                : osd_on ? &i2c_display : &no_display;
             if (notify.on) {
                 if (time_diff(notify_time, time_now()) > time_ms(2000)) {
                     notify.on = FALSE;
@@ -804,7 +799,7 @@ int main(void)
             config_process(b & ~B_PROCESSED);
         }
 
-        lcd_process();
+        i2c_process();
     }
 
     return 0;

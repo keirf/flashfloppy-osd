@@ -113,10 +113,10 @@ struct display {
 };
 
 /* LCD / FF-OSD I2C Protocol. */
-void lcd_init(void);
-void lcd_process(void);
-extern struct display lcd_display;
-extern bool_t ff_osd_i2c_protocol;
+void i2c_init(void);
+void i2c_process(void);
+extern struct display i2c_display;
+extern bool_t i2c_osd_protocol;
 extern uint8_t i2c_buttons_rx; /* Gotek -> FF_OSD */
 extern struct __packed i2c_osd_info {
     uint8_t protocol_ver;

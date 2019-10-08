@@ -1,7 +1,9 @@
 /*
- * lcd.c
+ * i2c.c
  * 
- * 1. HD44780 LCD controller via a PCF8574 I2C backpack.
+ * I2C communications to the host:
+ *  1. Emulate HD44780 LCD controller via a PCF8574 I2C backpack.
+ *  2. Support extended custom protocol with bidirectional comms.
  * 
  * Written & released by Keir Fraser <keir.xen@gmail.com>
  * 
@@ -44,11 +46,17 @@ static uint16_t d_cons, d_prod;
 static uint16_t t_ring[8];
 static uint16_t t_cons, t_prod;
 
+/* Display state, exported to display routines. */
+struct display i2c_display;
+
+/* LCD state. */
 static bool_t lcd_inc;
 static uint8_t lcd_ddraddr;
-struct display lcd_display;
-uint8_t i2c_buttons_rx;
-struct i2c_osd_info i2c_osd_info;
+
+/* I2C custom protocol state. */
+bool_t i2c_osd_protocol; /* using the custom protocol? */
+uint8_t i2c_buttons_rx; /* button state: Gotek -> OSD */
+struct i2c_osd_info i2c_osd_info; /* state: OSD -> Gotek */
 
 /* I2C Error ISR: As slave with clock stretch we can only receive:
  *  Bus error (BERR): Peripheral automatically recovers
@@ -87,63 +95,6 @@ static void IRQ_i2c_event(void)
         uint8_t *info = (uint8_t *)&i2c_osd_info;
         i2c->dr = (rp < sizeof(i2c_osd_info)) ? info[rp++] : 0;
     }
-}
-
-static void process_cmd(uint8_t cmd)
-{
-    uint8_t x = 0x80;
-    int c = 0;
-
-    if (!cmd)
-        return;
-
-    while (!(cmd & x)) {
-        x >>= 1;
-        c++;
-    }
-
-    switch (c) {
-    case 0: /* Set DDR Address */
-        lcd_ddraddr = cmd & 127;
-        break;
-    case 1: /* Set CGR Address */
-        break;
-    case 2: /* Function Set */
-        break;
-    case 3: /* Cursor or Display Shift */
-        break;
-    case 4: /* Display On/Off Control */
-        break;
-    case 5: /* Entry Mode Set */
-        lcd_inc = !!(cmd & 2);
-        break;
-    case 6: /* Return Home */
-        lcd_ddraddr = 0;
-        break;
-    case 7: /* Clear Display */
-        memset(lcd_display.text, ' ', sizeof(lcd_display.text));
-        lcd_ddraddr = 0;
-        break;
-    }
-}
-
-static void process_dat(uint8_t dat)
-{
-    int x, y;
-    if (lcd_ddraddr >= 0x68)
-        lcd_ddraddr = 0x00; /* jump to line 2 */
-    if ((lcd_ddraddr >= 0x28) && (lcd_ddraddr < 0x40))
-        lcd_ddraddr = 0x40; /* jump to line 1 */
-    x = lcd_ddraddr & 0x3f;
-    y = lcd_ddraddr >> 6;
-    if ((lcd_display.rows == 4) && (x >= 20)) {
-        x -= 20;
-        y += 2;
-    }
-    lcd_display.text[y][x] = dat;
-    lcd_ddraddr++;
-    if (x >= lcd_display.cols)
-        lcd_display.cols = min_t(unsigned int, x+1, config.max_cols);
 }
 
 /* FF OSD command set */
@@ -186,17 +137,17 @@ static void ff_osd_process(void)
         }
         if (ff_osd_y != 0) {
             /* Character Data. */
-            lcd_display.text[ff_osd_y-1][ff_osd_x] = x;
-            if (++ff_osd_x >= lcd_display.cols) {
+            i2c_display.text[ff_osd_y-1][ff_osd_x] = x;
+            if (++ff_osd_x >= i2c_display.cols) {
                 ff_osd_x = 0;
-                if (++ff_osd_y > lcd_display.rows)
+                if (++ff_osd_y > i2c_display.rows)
                     ff_osd_y = 0;
             }
         } else {
             /* Command. */
             if ((x & 0xc0) == OSD_COLUMNS) {
                 /* 0-40 */
-                lcd_display.cols = min_t(uint16_t, 40, x & 0x3f);
+                i2c_display.cols = min_t(uint16_t, 40, x & 0x3f);
             } else {
                 switch (x & 0xf0) {
                 case OSD_BUTTONS:
@@ -204,18 +155,18 @@ static void ff_osd_process(void)
                     break;
                 case OSD_ROWS:
                     /* 0-3 */
-                    lcd_display.rows = x & 0x03;
+                    i2c_display.rows = x & 0x03;
                     break;
                 case OSD_HEIGHTS:
-                    lcd_display.heights = x & 0x0f;
+                    i2c_display.heights = x & 0x0f;
                     break;
                 case OSD_BACKLIGHT:
                     switch (x & 0x0f) {
                     case 0:
-                        lcd_display.on = FALSE;
+                        i2c_display.on = FALSE;
                         break;
                     case 1:
-                        lcd_display.on = TRUE;
+                        i2c_display.on = TRUE;
                         break;
                     case 2:
                         ff_osd_x = 0;
@@ -231,21 +182,75 @@ static void ff_osd_process(void)
     t_cons = t_c;
 }
 
-void lcd_process(void)
+static void lcd_process_cmd(uint8_t cmd)
+{
+    uint8_t x = 0x80;
+    int c = 0;
+
+    if (!cmd)
+        return;
+
+    while (!(cmd & x)) {
+        x >>= 1;
+        c++;
+    }
+
+    switch (c) {
+    case 0: /* Set DDR Address */
+        lcd_ddraddr = cmd & 127;
+        break;
+    case 1: /* Set CGR Address */
+        break;
+    case 2: /* Function Set */
+        break;
+    case 3: /* Cursor or Display Shift */
+        break;
+    case 4: /* Display On/Off Control */
+        break;
+    case 5: /* Entry Mode Set */
+        lcd_inc = !!(cmd & 2);
+        break;
+    case 6: /* Return Home */
+        lcd_ddraddr = 0;
+        break;
+    case 7: /* Clear Display */
+        memset(i2c_display.text, ' ', sizeof(i2c_display.text));
+        lcd_ddraddr = 0;
+        break;
+    }
+}
+
+static void lcd_process_dat(uint8_t dat)
+{
+    int x, y;
+    if (lcd_ddraddr >= 0x68)
+        lcd_ddraddr = 0x00; /* jump to line 2 */
+    if ((lcd_ddraddr >= 0x28) && (lcd_ddraddr < 0x40))
+        lcd_ddraddr = 0x40; /* jump to line 1 */
+    x = lcd_ddraddr & 0x3f;
+    y = lcd_ddraddr >> 6;
+    if ((i2c_display.rows == 4) && (x >= 20)) {
+        x -= 20;
+        y += 2;
+    }
+    i2c_display.text[y][x] = dat;
+    lcd_ddraddr++;
+    if (x >= i2c_display.cols)
+        i2c_display.cols = min_t(unsigned int, x+1, config.max_cols);
+}
+
+static void lcd_process(void)
 {
     uint16_t d_c, d_p = d_prod;
     static uint16_t dat = 1;
     static bool_t rs;
-
-    if (ff_osd_i2c_protocol)
-        return ff_osd_process();
 
     /* Process the command sequence. */
     for (d_c = d_cons; d_c != d_p; d_c++) {
         uint8_t x = d_ring[MASK(d_ring, d_c)];
         if ((x & (_EN|_RW)) != _EN)
             continue;
-        lcd_display.on = !!(x & _BL);
+        i2c_display.on = !!(x & _BL);
         if (rs != !!(x & _RS)) {
             rs ^= 1;
             dat = 1;
@@ -254,9 +259,9 @@ void lcd_process(void)
         dat |= x >> 4;
         if (dat & 0x100) {
             if (rs)
-                process_dat(dat);
+                lcd_process_dat(dat);
             else
-                process_cmd(dat);
+                lcd_process_cmd(dat);
             dat = 1;
         }
     }
@@ -264,9 +269,16 @@ void lcd_process(void)
     d_cons = d_c;
 }
 
-void lcd_init(void)
+void i2c_process(void)
+{
+    return i2c_osd_protocol ? ff_osd_process() : lcd_process();
+}
+
+void i2c_init(void)
 {
     char *p;
+
+    i2c_osd_protocol = gpio_pins_connected(gpioa, 0, gpioa, 1);
 
     i2c_osd_info.protocol_ver = 0;
     i2c_osd_info.fw_major = strtol(fw_ver, &p, 10);
@@ -289,7 +301,7 @@ void lcd_init(void)
 
     /* Initialise I2C. */
     i2c->cr1 = 0;
-    i2c->oar1 = (ff_osd_i2c_protocol ? 0x10 : 0x27) << 1;
+    i2c->oar1 = (i2c_osd_protocol ? 0x10 : 0x27) << 1;
     i2c->cr2 = (I2C_CR2_FREQ(36) |
                 I2C_CR2_ITERREN |
                 I2C_CR2_ITEVTEN |
