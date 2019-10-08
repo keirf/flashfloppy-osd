@@ -248,7 +248,20 @@ struct rcc {
 #define RCC_APB2ENR_IOPAEN   (1u<< 2)
 #define RCC_APB2ENR_AFIOEN   (1u<< 0)
 
+#define RCC_CSR_LSIRDY       (1u<< 1)
+#define RCC_CSR_LSION        (1u<< 0)
+
 #define RCC_BASE 0x40021000
+
+/* Independent Watchdog */
+struct iwdg {
+    uint32_t kr;   /* 00: Key */
+    uint32_t pr;   /* 04: Prescaler */
+    uint32_t rlr;  /* 08: Reload */
+    uint32_t sr;   /* 0C: Status */
+};
+
+#define IWDG_BASE 0x40003000
 
 /* General-purpose I/O */
 struct gpio {

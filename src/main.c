@@ -532,6 +532,13 @@ int main(void)
     time_t frame_time;
     bool_t lost_sync, _keyboard_held;
 
+    /* Set up the Watchdog. Based on LSI at 30-60kHz (av. 40kHz). */
+    iwdg->kr = 0xcccc; /* Enables watchdog, turns on LSI oscillator. */
+    iwdg->kr = 0x5555; /* Enables access to PR and RLR. */
+    iwdg->pr = 3;      /* Prescaler: div32 => Ticks at 937-1875Hz (1250Hz) */
+    iwdg->rlr = 400;   /* Reload:    400   => Times out in 213-426ms (320ms) */
+    iwdg->kr = 0xaaaa; /* Load the new Reload value. */
+
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
         memcpy(_sdat, _ldat, _edat-_sdat);
@@ -682,6 +689,9 @@ int main(void)
     _keyboard_held = keyboard_held;
 
     for (;;) {
+
+        /* Reload the Watchdog. */
+        iwdg->kr = 0xaaaa;
 
         canary_check();
 

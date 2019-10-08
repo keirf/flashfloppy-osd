@@ -17,6 +17,7 @@
 #define PWR volatile struct pwr * const
 #define BKP volatile struct bkp * const
 #define RCC volatile struct rcc * const
+#define IWDG volatile struct iwdg * const
 #define GPIO volatile struct gpio * const
 #define AFIO volatile struct afio * const
 #define EXTI volatile struct exti * const
@@ -35,6 +36,7 @@ static FLASH flash = (struct flash *)FLASH_BASE;
 static PWR pwr = (struct pwr *)PWR_BASE;
 static BKP bkp = (struct bkp *)BKP_BASE;
 static RCC rcc = (struct rcc *)RCC_BASE;
+static IWDG iwdg = (struct iwdg *)IWDG_BASE;
 static GPIO gpioa = (struct gpio *)GPIOA_BASE;
 static GPIO gpiob = (struct gpio *)GPIOB_BASE;
 static GPIO gpioc = (struct gpio *)GPIOC_BASE;
