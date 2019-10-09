@@ -127,6 +127,26 @@ static void canary_check(void)
     ASSERT(_thread_stackbottom[0] == 0xdeadbeef);
 }
 
+static void watchdog_init(void)
+{
+    /* Set up the Watchdog. Based on LSI at 30-60kHz (av. 40kHz). */
+    iwdg->kr = 0xcccc; /* Enables watchdog, turns on LSI oscillator. */
+    while (iwdg->sr & 3) {
+        /* System Memory Bootloader modifies PR. We must wait for that 
+         * to take effect before making our own changes. */
+    }
+    iwdg->kr = 0x5555; /* Enables access to PR and RLR. */
+    iwdg->pr = 3;      /* Prescaler: div32 => Ticks at 937-1875Hz (1250Hz) */
+    iwdg->rlr = 400;   /* Reload:    400   => Times out in 213-426ms (320ms) */
+    iwdg->kr = 0xaaaa; /* Load the new Reload value. */
+}
+
+static void watchdog_kick(void)
+{
+    /* Reload the Watchdog. */
+    iwdg->kr = 0xaaaa;
+}
+
 static struct timer button_timer;
 static uint8_t rotary;
 static volatile uint8_t buttons;
@@ -533,12 +553,7 @@ int main(void)
     time_t frame_time;
     bool_t lost_sync, _keyboard_held;
 
-    /* Set up the Watchdog. Based on LSI at 30-60kHz (av. 40kHz). */
-    iwdg->kr = 0xcccc; /* Enables watchdog, turns on LSI oscillator. */
-    iwdg->kr = 0x5555; /* Enables access to PR and RLR. */
-    iwdg->pr = 3;      /* Prescaler: div32 => Ticks at 937-1875Hz (1250Hz) */
-    iwdg->rlr = 400;   /* Reload:    400   => Times out in 213-426ms (320ms) */
-    iwdg->kr = 0xaaaa; /* Load the new Reload value. */
+    watchdog_init();
 
     /* Relocate DATA. Initialise BSS. */
     if (_sdat != _ldat)
@@ -689,8 +704,7 @@ int main(void)
 
     for (;;) {
 
-        /* Reload the Watchdog. */
-        iwdg->kr = 0xaaaa;
+        watchdog_kick();
 
         canary_check();
 
