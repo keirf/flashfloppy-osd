@@ -243,8 +243,6 @@ static void IRQ_csync(void)
 
             /* Short sync: We are outside the vblank period. Start frame (we
              * were previously in vblank). */
-            if (display_height == 0)
-                goto eof;
             hline = HLINE_SOF;
             slave_arr_update();
             set_polarity();
@@ -257,7 +255,6 @@ static void IRQ_csync(void)
 
     } else if (hline >= (config.v_off + display_height)) {
 
-    eof:
         /* Vertical end of OSD: Disable TIM1 trigger and signal main loop. */
         tim1->smcr = 0;
         hline = HLINE_EOF;
@@ -521,10 +518,17 @@ static void emulate_gotek_buttons(void)
     *(volatile uint8_t *)&i2c_osd_info.buttons = b;
 }
 
-static struct display no_display;
+/* Called before erasing Flash, to temporarily disable the display. 
+ * Flash updates can stall instruction fetch and mess up the OSD. */
+void display_off(void)
+{
+    display_height = 0; /* Display off */
+    delay_us(500);      /* Wait for a few hlines (we only really need one) */
+}
 
 int main(void)
 {
+    static struct display no_display;
     int i;
     time_t frame_time;
     bool_t lost_sync, _keyboard_held;

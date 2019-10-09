@@ -161,6 +161,7 @@ void config_process(uint8_t b)
     if (b & B_SELECT) {
         if (++config_state >= C_max) {
             config_state = C_idle;
+            display_off();
             switch (new_config) {
             case C_SAVE:
                 config_write_flash(&config);

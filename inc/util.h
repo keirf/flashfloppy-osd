@@ -80,6 +80,9 @@ int printk(const char *format, ...)
 #define htobe16(x) _rev16(x)
 #define htobe32(x) _rev32(x)
 
+/* Display control */
+void display_off(void);
+
 /* Amiga keyboard */
 #define AMI_RETURN 0x44
 #define AMI_F(x)   (0x4f+(x))
