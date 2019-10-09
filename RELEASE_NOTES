@@ -3,6 +3,16 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.7 - 9 October 2019
+ - I2C: Bidirectional communications to Gotek
+   - Next FF release (v3.5a) will **REQUIRE** this firmware!
+   - PLEASE UPDATE!!
+ - Bug fixes:
+   - Fixed screen corruption after saving config to Flash
+   - Fixed I2C corruption after saving config to Flash
+   - Amiga hotkeys are edge triggered (initial keypress only)
+ - Implement Watchdog to reset OSD if it hangs
+
 ** v1.6 - 30 September 2019
  - I2C: Fix FF-OSD extended protocol handling
    - No more phantom button presses
