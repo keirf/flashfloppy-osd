@@ -39,6 +39,8 @@ static void config_write_flash(struct config *conf)
 
 static void lcd_display_update(void)
 {
+    if (i2c_osd_protocol)
+        return;
     i2c_display.rows = config.rows;
     i2c_display.cols = config.min_cols;
 }
