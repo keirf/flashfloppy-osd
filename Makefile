@@ -26,6 +26,7 @@ dist: all
 	cp -a src/$(PROJ).hex $(PROJ)-$(VER)/$(PROJ)-$(VER).hex
 	cp -a COPYING $(PROJ)-$(VER)/
 	cp -a README.md $(PROJ)-$(VER)/
+	cp -a RELEASE_NOTES $(PROJ)-$(VER)/
 	zip -r $(PROJ)-$(VER).zip $(PROJ)-$(VER)
 	rm -rf $(PROJ)-$(VER)
 
