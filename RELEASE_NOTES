@@ -7,6 +7,10 @@
  - I2C: Bidirectional communications to Gotek
    - Next FF release (v3.5a) will **REQUIRE** this firmware!
    - PLEASE UPDATE!!
+ - Amiga: Hotkeys control Gotek buttons via I2C
+   - The physical connection via A3-A5 **no longer works**
+   - A3-A5 are held LOW to force disconnection from Gotek
+   - A3-A5 may be repurposed in future
  - Bug fixes:
    - Fixed screen corruption after saving config to Flash
    - Fixed I2C corruption after saving config to Flash

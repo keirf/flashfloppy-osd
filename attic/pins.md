@@ -3,9 +3,9 @@
 | 0 |    | Rotary CLK    |    |                  |
 | 1 |    | Rotary DAT    |    |                  |
 | 2 |    | Rotary SW     |  Y | **NA** (BOOT1)   |
-| 3 |    | Gotek Prev    |  Y | Amiga KB_DAT     |
-| 4 |    | Gotek Next    |  Y | Amiga KB_CLK     |
-| 5 |    | Gotek Select  |    |                  |
+| 3 |    |               |  Y | Amiga KB_DAT     |
+| 4 |    |               |  Y | Amiga KB_CLK     |
+| 5 |    |               |    |                  |
 | 6 |    |               |  Y | I2C SCL          |
 | 7 |    |               |  Y | I2C SDA          |
 | 8 |  Y | CSYNC/HSYNC   |  Y | User Out (U0)    |

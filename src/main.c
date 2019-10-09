@@ -30,11 +30,6 @@
  *  B6: CLK
  *  B7: DAT
  * 
- * Buttons (Gotek):
- *  A3: PREV/LEFT/DOWN
- *  A4: NEXT/RIGHT/UP
- *  A5: SELECT/EJECT
- * 
  * Display:
  *  A8: CSYNC or HSYNC
  *  B14: VSYNC (only needed with HSYNC)
@@ -507,18 +502,16 @@ struct gotek_button {
 static bool_t gotek_active;
 
 static void emulate_gotek_button(
-    uint8_t keycode, struct gotek_button *button, int pin)
+    uint8_t keycode, struct gotek_button *button)
 {
     bool_t pressed = (keys & keycode) && gotek_active;
-    if (!(pressed ^ button->pressed))
-        return; /* no change */
-    if (pressed) {
+    if (!(pressed ^ button->pressed)) {
+        /* No change */
+    } else if (pressed) {
         button->t = time_now();
         button->pressed = TRUE;
-        gpio_write_pin(gpioa, pin, LOW);
     } else if (time_diff(button->t, time_now()) > time_ms(200)) {
         button->pressed = FALSE;
-        gpio_write_pin(gpioa, pin, HIGH);
     }
 }
 
@@ -529,9 +522,9 @@ static void emulate_gotek_buttons(void)
         gotek_active = FALSE;
     else if (!gotek_active && !keys)
         gotek_active = TRUE; /* only after keys are released */
-    emulate_gotek_button(K_LEFT, &gl, 3);
-    emulate_gotek_button(K_RIGHT, &gr, 4);
-    emulate_gotek_button(K_SELECT, &gs, 5);
+    emulate_gotek_button(K_LEFT, &gl);
+    emulate_gotek_button(K_RIGHT, &gr);
+    emulate_gotek_button(K_SELECT, &gs);
     if (gl.pressed) b |= B_LEFT;
     if (gr.pressed) b |= B_RIGHT;
     if (gs.pressed) b |= B_SELECT;
@@ -580,10 +573,10 @@ int main(void)
     /* PB14 = VSYNC input */
     gpio_configure_pin(gpio_vsync, pin_vsync, GPI_pull_up);
 
-    /* PA3,4,5: Gotek buttons */
-    gpio_configure_pin(gpioa, 3, GPO_opendrain(_2MHz, HIGH));
-    gpio_configure_pin(gpioa, 4, GPO_opendrain(_2MHz, HIGH));
-    gpio_configure_pin(gpioa, 5, GPO_opendrain(_2MHz, HIGH));
+    /* PA3,4,5: Used to be Gotek buttons. Hold LOW to force disconnection. */
+    gpio_configure_pin(gpioa, 3, GPO_opendrain(_2MHz, LOW));
+    gpio_configure_pin(gpioa, 4, GPO_opendrain(_2MHz, LOW));
+    gpio_configure_pin(gpioa, 5, GPO_opendrain(_2MHz, LOW));
 
     /* Turn on the clocks. */
     rcc->apb1enr |= (RCC_APB1ENR_SPI2EN
