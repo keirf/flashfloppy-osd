@@ -469,6 +469,7 @@ static void update_amiga_keys(void)
         static uint16_t hk_latch;
         bool_t hk_pressed;
         uint32_t s, r;
+        char *p;
         /* Unused hotkey? */
         if (hk->pin_mod == 0)
             continue;
@@ -484,10 +485,16 @@ static void update_amiga_keys(void)
         s = (uint16_t)hk->pin_high << pin_u0;
         r = (uint16_t)(hk->pin_mod & ~hk->pin_high) << pin_u0;
         gpio_user->bsrr = ((uint32_t)r << 16) | s;
-        if (hk->str[0]) {
-            strcpy((char *)notify.text[0], hk->str);
-            notify.cols = strlen(hk->str);
-            notify.rows = 1;
+        if (*(p = hk->str)) {
+            notify.cols = notify.rows = 0;
+            memset(notify.text, 0, sizeof(notify.text));
+            while (*p) {
+                int len = strlen(p);
+                strcpy((char *)notify.text[notify.rows], p);
+                notify.cols = max(notify.cols, len);
+                notify.rows++;
+                p += len + 1;
+            }
             notify.on = TRUE;
             notify_time = time_now();
         }

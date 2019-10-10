@@ -58,6 +58,21 @@ const static struct config dfl_config = {
     }
 #endif
 
+#if 0
+    /* An example configuration for DF0/DF1 switching, for Piotr. 
+     * Also an example of multi-row hotkey description text. */
+    .user_pin_opendrain = 0,
+    .user_pin_pushpull  = U(0),
+    .user_pin_high      = U(0), /* Default = DF0: AmiGotek */
+    .hotkey = {
+        [F(9)]  = { .str = "DF0: AmiGotek\0DF1: Floppy",
+                    .pin_mod  = U(0),
+                    .pin_high = U(0), },
+        [F(10)] = { .str = "DF0: Floppy\0DF1: AmiGotek",
+                    .pin_mod  = U(0), },
+    }
+#endif
+
 #undef F
 #undef U
 

@@ -37,7 +37,7 @@ extern struct __packed config {
         /* Mask of user pins driven HIGH by this hotkey. 
          * Pins in @pin_mod but not in @pin_high are driven LOW. */
         uint8_t pin_high;
-        char str[22];
+        char str[30];
     } hotkey[10];
 
     uint16_t crc16_ccitt;
