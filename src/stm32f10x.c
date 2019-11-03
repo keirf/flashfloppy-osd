@@ -47,27 +47,6 @@ void EXC_unexpected(struct extra_exception_frame *extra)
     system_reset();
 }
 
-static void bootloader_maybe_enter(void)
-{
-    static void (* const system_bootloader)(void) = (void *)0x1ffff001;
-    bool_t bootloader_enter;
-
-    /* Power up the backup-register interface and allow writes. */
-    rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
-    pwr->cr |= PWR_CR_DBP;
-
-    /* Has bootloader been requested via magic numbers in the backup regs? */
-    bootloader_enter = ((bkp->dr1[0] == 0xdead) && (bkp->dr1[1] == 0xbeef));
-
-    /* Clean up backup registers and peripheral clocks. */
-    bkp->dr1[0] = bkp->dr1[1] = 0;
-    rcc->apb1enr = 0;
-
-    /* Jump to the bootloader if requested. */
-    if (bootloader_enter)
-        (*system_bootloader)();
-}
-
 static void exception_init(void)
 {
     /* Initialise and switch to Process SP. Explicit asm as must be
@@ -160,25 +139,10 @@ static void peripheral_init(void)
 
 void stm32_init(void)
 {
-    bootloader_maybe_enter();
     exception_init();
     clock_init();
     peripheral_init();
     cpu_sync();
-}
-
-void stm32_bootloader_enter(void)
-{
-    /* Power up the backup-register interface and allow writes. */
-    rcc->apb1enr |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
-    pwr->cr |= PWR_CR_DBP;
-
-    /* Indicate to early startup that we want system bootloader. */
-    bkp->dr1[0] = 0xdead;
-    bkp->dr1[1] = 0xbeef;
-
-    /* Reset everything (except backup registers). */
-    system_reset();
 }
 
 static void fpec_wait_and_clear(void)

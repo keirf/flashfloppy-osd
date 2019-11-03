@@ -76,7 +76,6 @@ extern uint32_t vector_table[];
 
 /* System */
 void stm32_init(void);
-void stm32_bootloader_enter(void);
 void system_reset(void);
 
 /* Clocks */
