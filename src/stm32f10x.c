@@ -136,7 +136,7 @@ static void peripheral_init(void)
     rcc->ahbenr = RCC_AHBENR_DMA1EN;
 
     /* Turn off serial-wire JTAG and reclaim the GPIOs. */
-    afio->mapr = AFIO_MAPR_SWJ_CFG_DISABLED;
+    afio->mapr = AFIO_MAPR_SWJ_CFG_JTAGDISABLE;
 
     /* All pins in a stable state. */
     gpio_init(gpioa);
