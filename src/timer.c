@@ -9,10 +9,11 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-/* TIM4: IRQ 30. */
-void IRQ_30(void) __attribute__((alias("IRQ_timer")));
-#define TIMER_IRQ 30
-#define tim tim4
+/* This is a handy otherwise-unused IRQ vector at which the real TIM3 ISR 
+ * can trigger us. */
+void IRQ_18(void) __attribute__((alias("IRQ_timers")));
+
+#define tim tim3
 
 /* IRQ only on counter overflow, one-time enable. */
 #define TIM_CR1 (TIM_CR1_URS | TIM_CR1_OPM)
@@ -107,19 +108,16 @@ void timer_cancel(struct timer *timer)
 
 void timers_init(void)
 {
-    rcc->apb1enr |= RCC_APB1ENR_TIM4EN;
     tim->cr2 = 0;
-    tim->dier = TIM_DIER_UIE;
-    IRQx_set_prio(TIMER_IRQ, TIMER_IRQ_PRI);
-    IRQx_enable(TIMER_IRQ);
+    tim->dier |= TIM_DIER_UIE;
+    IRQx_set_prio(IRQ_TIMER, TIMER_IRQ_PRI);
+    IRQx_enable(IRQ_TIMER);
 }
 
-static void IRQ_timer(void)
+static void IRQ_timers(void)
 {
     struct timer *t;
     int32_t delta;
-
-    tim->sr = 0;
 
     while ((t = head) != NULL) {
         if ((delta = time_diff(time_now(), t->deadline)) > SLACK_TICKS) {

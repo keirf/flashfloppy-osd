@@ -23,6 +23,9 @@ void timer_cancel(struct timer *timer);
 
 void timers_init(void);
 
+/* Trigger this IRQ on TIM3->SR[UIF]. */
+#define IRQ_TIMER 18
+
 /*
  * Local variables:
  * mode: C

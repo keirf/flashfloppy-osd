@@ -18,8 +18,10 @@
 #define pin_amikbd_dat 3
 #define pin_amikbd_clk 4
 
+/* As the highest-priority target for TIM3 interrupts, we are responsible 
+ * for demuxing to any lower-priority targets (specifically, timer.c). */
 #define irq_tim3 29
-void IRQ_29(void) __attribute__((alias("IRQ_amikbd_clk")));
+void IRQ_29(void) __attribute__((alias("IRQ_TIM3_demux")));
 
 static uint8_t keymap[0x68];
 
@@ -112,6 +114,25 @@ static void IRQ_amikbd_clk(void)
 
     /* Acknowledge the byte (some games and demos have no keyboard handler). */
     handshake();
+}
+
+/* TIM3 is shared with timer.c: We demuux to the correct handler based on 
+ * flags in TIM3->SR. */
+static void IRQ_TIM3_demux(void)
+{
+    uint16_t sr = tim3->sr;
+
+    /* Clear the irq line. */
+    tim3->sr = ~sr;
+
+    if (sr & TIM_SR_CC1IF) {
+        IRQ_amikbd_clk();
+    }
+
+    if (sr & TIM_SR_UIF) {
+        /* Switch to timer-handling priority to handle timer.c work. */
+        IRQx_set_pending(IRQ_TIMER);
+    }
 }
 
 bool_t amiga_key_pressed(uint8_t keycode)
