@@ -19,7 +19,6 @@
 #define pin_amikbd_clk 4
 
 #define irq_tim3 29
-void IRQ_29(void) __attribute__((alias("IRQ_amikbd_clk")));
 
 static uint8_t keymap[0x68];
 
@@ -55,7 +54,7 @@ static bool_t modifiers_held(void)
     return (keymap[AMI_L_CTRL] & 1) && (keymap[AMI_L_ALT] & 1);
 }
 
-static void IRQ_amikbd_clk(void)
+void IRQ_amikbd_clk(void)
 {
     time_t t = time_now();
     int bit = gpio_read_pin(gpio_amikbd, pin_amikbd_dat);

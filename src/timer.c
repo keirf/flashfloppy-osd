@@ -9,10 +9,12 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-/* TIM4: IRQ 30. */
-void IRQ_30(void) __attribute__((alias("IRQ_timer")));
-#define TIMER_IRQ 30
-#define tim tim4
+extern void IRQ_amikbd_clk(void);
+
+/* TIM3: IRQ 29. */
+void IRQ_29(void) __attribute__((alias("demux_IRQ_29")));
+#define TIMER_IRQ 29
+#define tim tim3
 
 /* IRQ only on counter overflow, one-time enable. */
 #define TIM_CR1 (TIM_CR1_URS | TIM_CR1_OPM)
@@ -107,9 +109,8 @@ void timer_cancel(struct timer *timer)
 
 void timers_init(void)
 {
-    rcc->apb1enr |= RCC_APB1ENR_TIM4EN;
     tim->cr2 = 0;
-    tim->dier = TIM_DIER_UIE;
+    tim->dier |= TIM_DIER_UIE;
     IRQx_set_prio(TIMER_IRQ, TIMER_IRQ_PRI);
     IRQx_enable(TIMER_IRQ);
 }
@@ -119,8 +120,6 @@ static void IRQ_timer(void)
     struct timer *t;
     int32_t delta;
 
-    tim->sr = 0;
-
     while ((t = head) != NULL) {
         if ((delta = time_diff(time_now(), t->deadline)) > SLACK_TICKS) {
             reprogram_timer(delta);
@@ -129,6 +128,23 @@ static void IRQ_timer(void)
         head = t->next;
         t->next = TIMER_INACTIVE;
         (*t->cb_fn)(t->cb_dat);
+    }
+}
+
+static void demux_IRQ_29(void)
+{
+    uint16_t my_sr = tim->sr;
+
+    /* Clear the irq line. */
+    tim->sr = ~my_sr;
+
+    if (my_sr & TIM_SR_CC1IF)
+    {
+        IRQ_amikbd_clk();
+    }
+    if (my_sr & TIM_SR_UIF)
+    {
+        IRQ_timer();
     }
 }
 

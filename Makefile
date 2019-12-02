@@ -1,5 +1,5 @@
 
-export FW_VER := 1.7
+export FW_VER := 1.742
 
 PROJ = FF_OSD
 VER := v$(FW_VER)
