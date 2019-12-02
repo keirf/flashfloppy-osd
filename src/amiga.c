@@ -155,7 +155,7 @@ void amiga_init(void)
 
     /* We map PB4 (KBCLK) to TIM3,CH1 and use its input filter and edge 
      * detector to generate interrupts on clock transitions. */
-    afio->mapr |= AFIO_MAPR_TIM3_REMAP_PARTIAL;
+
     /* f_sampling = 72MHz/8 = 9MHz, N=8 -> must be stable for 889us. */
     tim3->ccmr1 = TIM_CCMR1_CC1S(TIM_CCS_INPUT_TI1) | TIM_CCMR1_IC1F(9);
     tim3->ccer = TIM_CCER_CC1E | TIM_CCER_CC1P; /* Falling edge */
