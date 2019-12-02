@@ -284,8 +284,6 @@ void i2c_init(void)
     i2c_osd_info.fw_major = strtol(fw_ver, &p, 10);
     i2c_osd_info.fw_minor = strtol(p+1, NULL, 10);
 
-    rcc->apb1enr |= RCC_APB1ENR_I2C1EN;
-
     gpio_configure_pin(gpiob, SCL, AFO_opendrain(_2MHz));
     gpio_configure_pin(gpiob, SDA, AFO_opendrain(_2MHz));
 
