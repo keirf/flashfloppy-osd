@@ -93,6 +93,17 @@ void display_off(void);
 #define AMI_LEFT   0x4f
 #define AMI_RIGHT  0x4e
 #define AMI_UP     0x4c
+#define AMI_KPLEFTPAREN  0x5a
+#define AMI_KPRIGHTPAREN 0x5b
+#define AMI_KPSLASH      0x5c
+#define AMI_KPPLUS       0x5e
+#define AMI_KPMINUS      0x4a
+
+#define AMI_W            0x11
+#define AMI_A            0x20
+#define AMI_S            0x21
+#define AMI_D            0x22
+
 extern bool_t keyboard_held;
 bool_t amiga_key_pressed(uint8_t keycode);
 #define amiga_key_pressed_now(k) (amiga_key_pressed(k) & 1)

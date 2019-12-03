@@ -18,10 +18,15 @@ const static struct config *flash_config = (struct config *)0x0800fc00;
 
 struct config config;
 
+extern void setup_spi(void);
+
 static void config_printk(const struct config *conf)
 {
     printk("\nCurrent config:\n");
     printk(" Sync: Active %s\n", conf->polarity ? "HIGH" : "LOW");
+    printk(" Pixel Timing: %s\n", config.display_timing ? "VGA" : "15kHz");
+    printk(" Video Output: SPI%s\n", config.display_spi ? "1 (PA7)" : "2 (PB15)");
+    printk(" Output Enable: %d\n", config.dispctl_mode );
     printk(" H.Off: %u\n", conf->h_off);
     printk(" V.Off: %u\n", conf->v_off);
     printk(" Rows: %u\n", conf->rows);
@@ -82,6 +87,8 @@ static enum {
     C_banner,
     /* Output */
     C_polarity,
+    C_disptiming,
+    C_spibus,
     C_h_off,
     C_v_off,
     /* LCD */
@@ -142,7 +149,7 @@ void config_process(uint8_t b)
     uint8_t _b;
     static uint8_t pb;
     bool_t changed = FALSE;
-    static enum { C_SAVE = 0, C_USE, C_DISCARD, C_RESET } new_config;
+    static enum { C_SAVE = 0, C_SAVEREBOOT, C_USE, C_DISCARD, C_RESET, C_NC_MAX} new_config;
     static struct config old_config;
 
     _b = b;
@@ -168,6 +175,10 @@ void config_process(uint8_t b)
             case C_SAVE:
                 config_write_flash(&config);
                 break;
+            case C_SAVEREBOOT:
+                config_write_flash(&config);
+                while(1) {} /* hang and let WDT reboot */
+                break;
             case C_USE:
                 break;
             case C_DISCARD:
@@ -176,6 +187,9 @@ void config_process(uint8_t b)
             case C_RESET:
                 config = dfl_config;
                 config_write_flash(&config);
+                while(1) {} /* hang and let WDT reboot */
+                break;
+            case C_NC_MAX:
                 break;
             }
             printk("\n");
@@ -207,6 +221,25 @@ void config_process(uint8_t b)
             config.polarity ^= 1;
         if (b)
             cnf_prt(1, "Active %s", config.polarity ? "HIGH" : "LOW");
+        break;
+    case C_disptiming:
+        if (changed)
+            cnf_prt(0, "Pixel Timing:");
+        if (b & (B_LEFT|B_RIGHT)) {
+            config.display_timing ^= 1;
+            setup_spi();
+        }
+        if (b)
+            cnf_prt(1, "%s", config.display_timing ? "VGA" : "15kHz");
+        break;
+    case C_spibus:
+        if (changed)
+            cnf_prt(0, "SPI");
+        if (b & (B_LEFT|B_RIGHT)) {
+            config.display_spi ^= 1;
+        }
+        if (b)
+            cnf_prt(1, "%s", config.display_spi ? "1 (PA7)" : "2 (PB15)");
         break;
     case C_h_off:
         if (changed)
@@ -262,16 +295,24 @@ void config_process(uint8_t b)
             cnf_prt(1, "%u", config.max_cols);
         break;
     case C_save: {
-        const static char *str[] = { "Save", "Use",
+        const static char *str[] = { "Save", "Save+Reset", "Use",
                                      "Discard", "Factory Reset" };
         if (changed) {
             cnf_prt(0, "Save New Config?");
-            new_config = C_SAVE;
+            if (old_config.display_spi == config.display_spi)
+                new_config = C_SAVE;
+            else
+                new_config = C_SAVEREBOOT;
         }
-        if (b & B_LEFT)
-            new_config = (new_config - 1) & 3;
+        if (b & B_LEFT) {
+            if (new_config > 0)
+                --new_config;
+            else
+                new_config = C_NC_MAX-1;
+        }
         if (b & B_RIGHT)
-            new_config = (new_config + 1) & 3;
+            if (++new_config >= C_NC_MAX)
+                new_config = 0;
         if (b)
             cnf_prt(1, "%s", str[new_config]);
         break;

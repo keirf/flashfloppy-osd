@@ -7,7 +7,7 @@
 | 4 |    |               |  Y | Amiga KB_CLK     |
 | 5 |    |               |    |                  |
 | 6 |    |               |  Y | I2C SCL          |
-| 7 |    |               |  Y | I2C SDA          |
+| 7 |    | Disp.Out.SPI1 |  Y | I2C SDA          |
 | 8 |  Y | CSYNC/HSYNC   |  Y | User Out (U0)    |
 | 9 |  Y | Serial Tx     |  Y | User Out (U1)    |
 |10 |  Y | Serial Rx     |  Y | User Out (U2)    |

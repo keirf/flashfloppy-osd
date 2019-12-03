@@ -19,6 +19,14 @@ extern struct __packed config {
 
     uint16_t rows;
 
+#define DISP_15KHZ 0
+#define DISP_VGA 1
+    uint16_t display_timing;
+
+#define DISP_SPI2 0
+#define DISP_SPI1 1
+    uint16_t display_spi;
+
 #define DISPCTL_tristate    0 /* PB15 is tristate outside OSD; PA15 unused */
 #define DISPCTL_enable_high 1 /* PA15 is Display Enable: Active HIGH */
 #define DISPCTL_enable_low  2 /* PA15 is Display Enable: Active LOW */
