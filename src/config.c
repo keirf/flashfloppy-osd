@@ -30,6 +30,7 @@ static void config_printk(const struct config *conf)
     printk("\nCurrent config:\n");
     printk(" Sync: Active %s\n", conf->polarity ? "HIGH" : "LOW");
     printk(" Pixel Timing: %s\n", config.display_timing ? "VGA" : "15kHz");
+    printk(" Auto Sync: %s\n", config.display_autosync ? "ON" : "OFF");
     printk(" Display Height: %s\n", conf->display_2Y ? "Double" : "Normal");
     printk(" Display Output: %s\n", config.display_spi ? "PA7/SPI1" : "PB15/SPI2");
     printk(" Display Enable: %s\n", dispen_pretty[config.dispctl_mode] );
@@ -94,6 +95,7 @@ static enum {
     /* Output */
     C_polarity,
     C_disptiming,
+    C_autosync,
     C_disp2Y,
     C_spibus,
     C_dispen,
@@ -239,6 +241,14 @@ void config_process(uint8_t b)
         }
         if (b)
             cnf_prt(1, "%s", config.display_timing ? "VGA" : "15kHz");
+        break;
+    case C_autosync:
+        if (changed)
+            cnf_prt(0, "Auto Sync:");
+        if (b & (B_LEFT|B_RIGHT))
+            config.display_autosync ^= 1;
+        if (b)
+            cnf_prt(1, "%s", config.display_autosync ? "ON" : "OFF");
         break;
     case C_disp2Y:
         if (changed)

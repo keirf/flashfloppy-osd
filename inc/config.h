@@ -28,6 +28,8 @@ extern struct __packed config {
 #define DISP_VGA 1
     uint16_t display_timing;
 
+    uint16_t display_autosync;
+
 #define DISP_SPI2 0
 #define DISP_SPI1 1
     uint16_t display_spi;
