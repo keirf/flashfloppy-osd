@@ -168,17 +168,26 @@ volatile unsigned int vstart;
 static void button_amikeys(void)
 {
     /* Sync Polarity. */
-    if (amiga_key_pressed(AMI_KPPLUS))
+    if (amiga_key_pressed(AMI_KPPLUS)) {
+        config.display_autosync = FALSE;
         config.polarity = TRUE;
-    if (amiga_key_pressed(AMI_KPMINUS))
+    }
+    if (amiga_key_pressed(AMI_KPMINUS)) {
+        config.display_autosync = FALSE;
         config.polarity = FALSE;
+    }
     if (amiga_key_pressed(AMI_KPLEFTPAREN)) {
+        config.display_autosync = FALSE;
         config.display_timing = DISP_15KHZ;
         setup_spi();
     }
     if (amiga_key_pressed(AMI_KPRIGHTPAREN)) {
+        config.display_autosync = FALSE;
         config.display_timing = DISP_VGA;
         setup_spi();
+    }
+    if (amiga_key_pressed(AMI_KPSLASH)) {
+        config.display_autosync = TRUE;
     }
     if (amiga_key_pressed(AMI_W))
         config.v_off = max_t(uint16_t, config.v_off-1, 2);
@@ -313,6 +322,11 @@ static void IRQ_vsync(void)
     hline = HLINE_VBL;
 }
 
+#define sync_log_MAX 20
+volatile static int sync_log_ptr;
+volatile static int32_t sync_log[sync_log_MAX];
+static time_t last_sync_time;
+
 static void IRQ_csync(void)
 {
     exti->pr = m(pin_csync);
@@ -349,7 +363,12 @@ static void IRQ_csync(void)
 
     } else if (++hline < vstart) {
 
-        /* Before vertical start of OSD: Do nothing. */
+        /* Before vertical start of OSD: Time hsync pulses. */
+        time_t this_sync_time = time_now();
+        sync_log[sync_log_ptr++] =  time_diff(last_sync_time, this_sync_time);
+        last_sync_time = this_sync_time;
+        if (sync_log_ptr >= sync_log_MAX)
+            sync_log_ptr = 0;
 
     } else if (hline >= (vstart + display_height)) {
 
@@ -723,6 +742,55 @@ void setup_spi(void)
     slave_arr_update();
 }
 
+static time_t auto_time;
+void do_autosync(void)
+{
+    unsigned int avg_hz;
+    time_t avg_sync_time;
+    bool_t valid_sync_data;
+    int i;
+
+    if (time_diff(auto_time, time_now()) < time_ms(1000))
+        return;
+
+    auto_time = time_now();
+
+    avg_sync_time = 0;
+    for (i = 0; i < sync_log_MAX; i++)
+        avg_sync_time += sync_log[i];
+    avg_sync_time /= sync_log_MAX;
+
+    /* Require all samples to be +/- 10/9,000,000th from average */
+    valid_sync_data = (avg_sync_time != 0);
+    for (i = 0; i < sync_log_MAX; i++) {
+        int diff = sync_log[i] - avg_sync_time;
+        if ((diff > 10) || (diff < -10))
+            valid_sync_data = FALSE;
+    }
+    if (!valid_sync_data)
+        return;
+
+    /* 9MHz clock, 15.625kHz => 576 => PAL/NTSC
+     * 9MHz clock, 20.000kHz => 450 => my threshold
+     * 9MHz clock, 39.130kHz => 230 => VGA */
+    avg_hz = 9000000 / avg_sync_time; /* sync time -> frequency in Hz */
+    if ((avg_hz < 20000)
+        && (config.display_timing != DISP_15KHZ)) {
+        /* PAL/NTSC */
+        config.display_timing = DISP_15KHZ;
+        config.polarity = FALSE;
+        printk("Switch to PAL/NTSC: %d Hz < 20kHz\n", avg_hz);
+        setup_spi();
+    } else if ((avg_hz >= 20000)
+               && (config.display_timing != DISP_VGA)) {
+        /* VGA */
+        config.display_timing = DISP_VGA;
+        config.polarity = TRUE;
+        printk("Switch to VGA: %d Hz > 20kHz\n", avg_hz);
+        setup_spi();
+    }
+}
+
 int main(void)
 {
     static struct display no_display;
@@ -868,7 +936,7 @@ int main(void)
         IRQx_enable(irqs[i]);
     }
 
-    frame_time = time_now();
+    frame_time = auto_time = time_now();
     lost_sync = FALSE;
 
     _keyboard_held = keyboard_held;
@@ -922,6 +990,9 @@ int main(void)
                 printk("Sync found\n");
                 lost_sync = FALSE;
             }
+
+            if (config.display_autosync)
+                do_autosync();
 
             frame_time = time_now();
             frame = 0;
