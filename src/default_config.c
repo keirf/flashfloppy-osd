@@ -20,6 +20,7 @@ const static struct config dfl_config = {
     .rows = 2,
     .display_timing = DISP_15KHZ,
     .display_spi = DISP_SPI2,
+    .display_2Y = FALSE,
 
 #define F(x) (x-1)   /* Hotkey (F1-F10) array index */
 #define U(x) (1u<<x) /* User pin (U0-U2) bitmask */

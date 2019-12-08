@@ -124,6 +124,7 @@ int EXC_reset(void) __attribute__((alias("main")));
 void setup_spi(void);
 static void slave_arr_update(void);
 static uint16_t startup_display_spi;
+static uint16_t startup_dispctl_mode;
 
 /* Guard the stacks with known values. */
 static void canary_init(void)
@@ -389,7 +390,7 @@ static uint32_t dispctl_off;
  * configured display-control mode. */
 static void setup_dispctl_mode(void)
 {
-    switch (config.dispctl_mode) {
+    switch (startup_dispctl_mode) {
 
     case DISPCTL_tristate:
         /* PA15: Unused 
@@ -418,7 +419,7 @@ static void setup_dispctl_mode(void)
     case DISPCTL_enable_low: {
         /* PA15: Display Enable: Active HIGH or LOW 
          * PB15: Always driven */
-        bool_t active_low = (config.dispctl_mode == DISPCTL_enable_low);
+        bool_t active_low = (startup_dispctl_mode == DISPCTL_enable_low);
 
         if (startup_display_spi == DISP_SPI1) {
             gpio_configure_pin(gpio_display_spi1, pin_display_spi1, AFO_pushpull(_50MHz));
@@ -476,11 +477,13 @@ static void IRQ_osd_end(void)
     if (startup_display_spi == DISP_SPI1) {
         dma_display_spi1.ccr = 0;
         dma_display_spi1.cndtr = cur_display->cols/2 + 1;
-        dma_display_spi1.cmar += sizeof(display_dat[0]);
+        if ((config.display_2Y == FALSE) || (hline & 0x1))
+            dma_display_spi1.cmar += sizeof(display_dat[0]);
     } else {
         dma_display_spi2.ccr = 0;
         dma_display_spi2.cndtr = cur_display->cols/2 + 1;
-        dma_display_spi2.cmar += sizeof(display_dat[0]);
+        if ((config.display_2Y == FALSE) || (hline & 0x1))
+            dma_display_spi2.cmar += sizeof(display_dat[0]);
     }
 }
 
@@ -761,6 +764,7 @@ int main(void)
 
     config_init();
     startup_display_spi = config.display_spi;
+    startup_dispctl_mode = config.dispctl_mode;
 
     /* Set user pin output modes and initial logic levels. */
     for (i = 0; i < 3; i++) {
@@ -971,7 +975,10 @@ int main(void)
 
                 tim1->ccr4 = tim1->ccr3 - sysclk_us(1);
                 barrier(); /* Set post-OSD timeout /then/ enable display */
-                display_height = height;
+                if (config.display_2Y)
+                    display_height = 2*height;
+                else
+                    display_height = height;
             } else {
                 display_height = 0;
             }

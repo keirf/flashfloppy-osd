@@ -135,7 +135,7 @@ static void peripheral_init(void)
 
     rcc->ahbenr = RCC_AHBENR_DMA1EN;
 
-    /* Turn off serial-wire JTAG and reclaim the GPIOs.
+    /* Enable SWD, Turn off serial-wire JTAG and reclaim the GPIOs.
      * Amiga keyboard map PB4 (KBCLK) to TIM3,CH1 and use its input filter
      * and edge detector to generate interrupts on clock transitions. */
     afio->mapr = (AFIO_MAPR_SWJ_CFG_JTAGDISABLE

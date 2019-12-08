@@ -9,6 +9,11 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
+enum dispen { DISPCTL_tristate = 0, DISPCTL_enable_high, DISPCTL_enable_low, DISPCTL_MAX };
+/* PB15 is tristate outside OSD; PA15 unused
+ * PA15 is Display Enable: Active HIGH
+ * PA15 is Display Enable: Active LOW */
+
 extern struct __packed config {
 
     uint16_t polarity;
@@ -27,10 +32,13 @@ extern struct __packed config {
 #define DISP_SPI1 1
     uint16_t display_spi;
 
-#define DISPCTL_tristate    0 /* PB15 is tristate outside OSD; PA15 unused */
-#define DISPCTL_enable_high 1 /* PA15 is Display Enable: Active HIGH */
-#define DISPCTL_enable_low  2 /* PA15 is Display Enable: Active LOW */
+    /* dispen enum
+     * DISPCTL_tristate    0    PB15 is tristate outside OSD; PA15 unused
+     * DISPCTL_enable_high 1    PA15 is Display Enable: Active HIGH
+     * DISPCTL_enable_low  2    PA15 is Display Enable: Active LOW */
     uint16_t dispctl_mode;
+
+    uint16_t display_2Y;
 
     /* Mask of user-assigned pins configured in open-drain mode. */
     uint8_t user_pin_opendrain;

@@ -20,13 +20,19 @@ struct config config;
 
 extern void setup_spi(void);
 
+const static char *dispen_pretty[] = { "None", "PA15 Act.HIGH", "PA15 Act.LOW" };
+/* PB15 is tristate outside OSD; PA15 unused
+ * PA15 is Display Enable: Active HIGH
+ * PA15 is Display Enable: Active LOW */
+
 static void config_printk(const struct config *conf)
 {
     printk("\nCurrent config:\n");
     printk(" Sync: Active %s\n", conf->polarity ? "HIGH" : "LOW");
     printk(" Pixel Timing: %s\n", config.display_timing ? "VGA" : "15kHz");
-    printk(" Video Output: SPI%s\n", config.display_spi ? "1 (PA7)" : "2 (PB15)");
-    printk(" Output Enable: %d\n", config.dispctl_mode );
+    printk(" Display Height: %s\n", conf->display_2Y ? "Double" : "Normal");
+    printk(" Display Output: %s\n", config.display_spi ? "PA7/SPI1" : "PB15/SPI2");
+    printk(" Display Enable: %s\n", dispen_pretty[config.dispctl_mode] );
     printk(" H.Off: %u\n", conf->h_off);
     printk(" V.Off: %u\n", conf->v_off);
     printk(" Rows: %u\n", conf->rows);
@@ -88,7 +94,9 @@ static enum {
     /* Output */
     C_polarity,
     C_disptiming,
+    C_disp2Y,
     C_spibus,
+    C_dispen,
     C_h_off,
     C_v_off,
     /* LCD */
@@ -216,7 +224,7 @@ void config_process(uint8_t b)
         break;
     case C_polarity:
         if (changed)
-            cnf_prt(0, "Sync:");
+            cnf_prt(0, "Sync Polarity:");
         if (b & (B_LEFT|B_RIGHT))
             config.polarity ^= 1;
         if (b)
@@ -232,14 +240,38 @@ void config_process(uint8_t b)
         if (b)
             cnf_prt(1, "%s", config.display_timing ? "VGA" : "15kHz");
         break;
+    case C_disp2Y:
+        if (changed)
+            cnf_prt(0, "Display Height:");
+        if (b & (B_LEFT|B_RIGHT)) {
+            config.display_2Y ^= 1;
+        }
+        if (b)
+            cnf_prt(1, "%s", config.display_2Y ? "Double" : "Normal");
+        break;
     case C_spibus:
         if (changed)
-            cnf_prt(0, "SPI");
+            cnf_prt(0, "Display Output:");
         if (b & (B_LEFT|B_RIGHT)) {
             config.display_spi ^= 1;
         }
         if (b)
-            cnf_prt(1, "%s", config.display_spi ? "1 (PA7)" : "2 (PB15)");
+            cnf_prt(1, "%s", config.display_spi ? "PA7/SPI1" : "PB15/SPI2");
+        break;
+    case C_dispen:
+        if (changed)
+            cnf_prt(0, "Display Enable:");
+        if (b & B_LEFT) {
+            if (config.dispctl_mode > 0)
+                --config.dispctl_mode;
+            else
+                config.dispctl_mode = DISPCTL_MAX-1;
+        }
+        if (b & B_RIGHT)
+            if (++config.dispctl_mode >= DISPCTL_MAX)
+                config.dispctl_mode = 0;
+        if (b)
+            cnf_prt(1, "%s", dispen_pretty[config.dispctl_mode] );
         break;
     case C_h_off:
         if (changed)
@@ -299,7 +331,8 @@ void config_process(uint8_t b)
                                      "Discard", "Factory Reset" };
         if (changed) {
             cnf_prt(0, "Save New Config?");
-            if (old_config.display_spi == config.display_spi)
+            if ((old_config.display_spi == config.display_spi)
+             && (old_config.dispctl_mode == config.dispctl_mode) )
                 new_config = C_SAVE;
             else
                 new_config = C_SAVEREBOOT;
