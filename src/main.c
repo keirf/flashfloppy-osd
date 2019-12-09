@@ -121,10 +121,12 @@ int EXC_reset(void) __attribute__((alias("main")));
 
 #include "font.h"
 
-void setup_spi(void);
+void setup_spi(uint16_t video_mode);
 static void slave_arr_update(void);
 static uint16_t startup_display_spi;
 static uint16_t startup_dispctl_mode;
+uint16_t running_display_timing;
+uint16_t running_polarity, detected_polarity;
 
 /* Guard the stacks with known values. */
 static void canary_init(void)
@@ -167,28 +169,6 @@ volatile unsigned int vstart;
 /* Amiga keyboard for quick change display settings */
 static void button_amikeys(void)
 {
-    /* Sync Polarity. */
-    if (amiga_key_pressed(AMI_KPPLUS)) {
-        config.display_autosync = FALSE;
-        config.polarity = TRUE;
-    }
-    if (amiga_key_pressed(AMI_KPMINUS)) {
-        config.display_autosync = FALSE;
-        config.polarity = FALSE;
-    }
-    if (amiga_key_pressed(AMI_KPLEFTPAREN)) {
-        config.display_autosync = FALSE;
-        config.display_timing = DISP_15KHZ;
-        setup_spi();
-    }
-    if (amiga_key_pressed(AMI_KPRIGHTPAREN)) {
-        config.display_autosync = FALSE;
-        config.display_timing = DISP_VGA;
-        setup_spi();
-    }
-    if (amiga_key_pressed(AMI_KPSLASH)) {
-        config.display_autosync = TRUE;
-    }
     if (amiga_key_pressed(AMI_W))
         config.v_off = max_t(uint16_t, config.v_off-1, 2);
     if (amiga_key_pressed(AMI_S))
@@ -197,6 +177,28 @@ static void button_amikeys(void)
         config.h_off = max_t(uint16_t, config.h_off-1, 1);
     if (amiga_key_pressed(AMI_D))
         config.h_off = min_t(uint16_t, config.h_off+1, 199);
+
+#ifndef NDEBUG
+    /* Sync Polarity. */
+    if (amiga_key_pressed(AMI_KPPLUS)) {
+        running_polarity = config.polarity = SYNC_HIGH;
+    }
+    if (amiga_key_pressed(AMI_KPMINUS)) {
+        running_polarity = config.polarity = SYNC_LOW;
+    }
+    if (amiga_key_pressed(AMI_KPLEFTPAREN)) {
+        config.display_timing = DISP_15KHZ;
+        setup_spi(config.display_timing);
+    }
+    if (amiga_key_pressed(AMI_KPRIGHTPAREN)) {
+        config.display_timing = DISP_VGA;
+        setup_spi(config.display_timing);
+    }
+    if (amiga_key_pressed(AMI_KPSLASH)) {
+        config.display_timing = DISP_AUTO;
+        config.polarity = SYNC_AUTO;
+    }
+#endif
 }
 
 static uint8_t get_buttons(void)
@@ -245,11 +247,6 @@ static void button_timer_fn(void *unused)
     }
 }
 
-static int hline, frame;
-#define HLINE_EOF -1
-#define HLINE_VBL 0
-#define HLINE_SOF 1
-
 #define MAX_DISPLAY_HEIGHT 52
 static uint16_t display_dat[MAX_DISPLAY_HEIGHT][40/2+1];
 static struct display *cur_display = &i2c_display;
@@ -259,7 +256,7 @@ static uint16_t display_height;
 static void slave_arr_update(void)
 {
     unsigned int hstart;
-    switch (config.display_timing) {
+    switch (running_display_timing) {
         case DISP_VGA:
             vstart = config.v_off*2;
             if (startup_display_spi == DISP_SPI1) {
@@ -302,7 +299,7 @@ static void slave_arr_update(void)
 
 static void set_polarity(void)
 {
-    if (config.polarity) {
+    if (running_polarity) {
         /* Active High: Rising edge = sync start */
         exti->ftsr &= ~(m(pin_csync) | m(pin_vsync));
         exti->rtsr |= m(pin_csync) | m(pin_vsync); /* Rising edge */
@@ -315,6 +312,11 @@ static void set_polarity(void)
     }
 }
 
+static int hline, frame;
+#define HLINE_EOF -1
+#define HLINE_VBL 0
+#define HLINE_SOF 1
+
 static void IRQ_vsync(void)
 {
     exti->pr = m(pin_vsync);
@@ -325,6 +327,12 @@ static void IRQ_vsync(void)
 #define sync_log_MAX 20
 volatile static int sync_log_ptr;
 volatile static int32_t sync_log[sync_log_MAX];
+
+#define sync_sum_MAX 1000
+volatile static int sync_sum_ptr;
+volatile static int32_t sync_sum_high;
+volatile static int32_t sync_sum_low;
+
 static time_t last_sync_time;
 
 static void IRQ_csync(void)
@@ -333,15 +341,39 @@ static void IRQ_csync(void)
 
     if (hline <= 0) { /* EOF or VBL */
 
-        static time_t p;
+        static time_t p, last_polarity_time;
         time_t t = time_now();
+        bool_t csync_now = gpio_read_pin(gpio_csync, pin_csync);
 
         /* Trigger on both sync edges so we can measure sync pulse width: 
          * Normal Sync ~= 5us, Porch+Data ~= 59us */
         exti->ftsr |= m(pin_csync) | m(pin_vsync);
         exti->rtsr |= m(pin_csync) | m(pin_vsync);
 
-        if (gpio_read_pin(gpio_csync, pin_csync) == config.polarity) {
+        /* do some sync polarity calculations */
+        /* ignore negative diff */
+        if ( time_diff(last_polarity_time, t) < 0 )
+            last_polarity_time = t;
+
+        if (csync_now) // its high now, so it was a low pulse
+            sync_sum_low += time_diff(last_polarity_time, t);
+        else
+            sync_sum_high += time_diff(last_polarity_time, t);
+        last_polarity_time = t;
+
+        if (sync_sum_ptr++ >= sync_sum_MAX) {
+
+            /* 39kHz VGA is  low for ~11x longer than high
+             * 15kHz PAL is high for ~13x longer than low */
+            if (sync_sum_low > 8*sync_sum_high)
+                detected_polarity = SYNC_HIGH;
+            if (sync_sum_high > 4*sync_sum_low)
+                detected_polarity = SYNC_LOW;
+
+            sync_sum_low = sync_sum_high = sync_sum_ptr = 0;
+        }
+
+        if (csync_now == running_polarity) {
 
             /* Sync pulse start: remember the current time. */
             p = t;
@@ -395,8 +427,6 @@ static void IRQ_csync(void)
                 dma_display_spi2.cmar = (uint32_t)(unsigned long)display_dat;
             }
         }
-
-
     }
 }
 
@@ -683,7 +713,7 @@ void setup_spi1(void)
     /* Configure SPI: 16-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     /* SPI1 is on APB2 which runs at 72MHz */
     spi_display_spi1->cr2 = SPI_CR2_TXDMAEN;
-    switch (config.display_timing) {
+    switch (running_display_timing) {
         case DISP_VGA:
             spi_display_spi1->cr1 = (SPI_CR1_MSTR | /* master */
                             SPI_CR1_SSM | SPI_CR1_SSI | /* software NSS */
@@ -710,7 +740,7 @@ void setup_spi2(void)
     /* Configure SPI: 16-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     /* SPI2 is on APB1 which runs at 36MHz */
     spi_display_spi2->cr2 = SPI_CR2_TXDMAEN;
-    switch (config.display_timing) {
+    switch (running_display_timing) {
         case DISP_VGA:
             spi_display_spi2->cr1 = (SPI_CR1_MSTR | /* master */
                             SPI_CR1_SSM | SPI_CR1_SSI | /* software NSS */
@@ -732,8 +762,10 @@ void setup_spi2(void)
     }
 }
 
-void setup_spi(void)
+void setup_spi(uint16_t video_mode)
 {
+    running_display_timing = video_mode;
+
     if (startup_display_spi == DISP_SPI1)
         setup_spi1();
     else
@@ -749,11 +781,6 @@ void do_autosync(void)
     time_t avg_sync_time;
     bool_t valid_sync_data;
     int i;
-
-    if (time_diff(auto_time, time_now()) < time_ms(1000))
-        return;
-
-    auto_time = time_now();
 
     avg_sync_time = 0;
     for (i = 0; i < sync_log_MAX; i++)
@@ -775,19 +802,19 @@ void do_autosync(void)
      * 9MHz clock, 39.130kHz => 230 => VGA */
     avg_hz = 9000000 / avg_sync_time; /* sync time -> frequency in Hz */
     if ((avg_hz < 20000)
-        && (config.display_timing != DISP_15KHZ)) {
+        && (running_display_timing != DISP_15KHZ)) {
         /* PAL/NTSC */
-        config.display_timing = DISP_15KHZ;
-        config.polarity = FALSE;
+#ifndef NDEBUG
         printk("Switch to PAL/NTSC: %d Hz < 20kHz\n", avg_hz);
-        setup_spi();
+#endif
+        setup_spi(DISP_15KHZ);
     } else if ((avg_hz >= 20000)
-               && (config.display_timing != DISP_VGA)) {
+               && (running_display_timing != DISP_VGA)) {
         /* VGA */
-        config.display_timing = DISP_VGA;
-        config.polarity = TRUE;
+#ifndef NDEBUG
         printk("Switch to VGA: %d Hz > 20kHz\n", avg_hz);
-        setup_spi();
+#endif
+        setup_spi(DISP_VGA);
     }
 }
 
@@ -833,6 +860,9 @@ int main(void)
     config_init();
     startup_display_spi = config.display_spi;
     startup_dispctl_mode = config.dispctl_mode;
+    running_polarity = SYNC_LOW;
+    if (config.polarity == SYNC_HIGH)
+        running_polarity = SYNC_HIGH;
 
     /* Set user pin output modes and initial logic levels. */
     for (i = 0; i < 3; i++) {
@@ -851,7 +881,10 @@ int main(void)
     else
         dma_display_spi2.cpar = (uint32_t)(unsigned long)&spi_display_spi2->dr;
 
-    setup_spi();
+    if (config.display_timing != DISP_AUTO)
+        setup_spi(config.display_timing);
+    else
+        setup_spi(DISP_15KHZ);
 
     /* PA8 -> EXTI8 ; PB14 -> EXTI14 */
     afio->exticr4 |= 0x0100;
@@ -969,6 +1002,21 @@ int main(void)
             IRQ_global_enable();
         }
 
+        if (time_diff(auto_time, time_now()) > time_ms(1000)) {
+            auto_time = time_now();
+            if (config.display_timing == DISP_AUTO)
+                do_autosync();
+
+            if (config.polarity == SYNC_AUTO) {
+#ifndef NDEBUG
+                printk ("%d high %d low %d\n", sync_sum_ptr, sync_sum_high, sync_sum_low );
+                if (running_polarity != detected_polarity)
+                    printk("Polarity to active %s\n",detected_polarity ? "HIGH" : "LOW");
+#endif
+                running_polarity = detected_polarity;
+            }
+        }
+
         /* Keyboard hold/release notifier? */
         if (keyboard_held != _keyboard_held) {
             snprintf((char *)notify.text[0], sizeof(notify.text[0]),
@@ -990,9 +1038,6 @@ int main(void)
                 printk("Sync found\n");
                 lost_sync = FALSE;
             }
-
-            if (config.display_autosync)
-                do_autosync();
 
             frame_time = time_now();
             frame = 0;
@@ -1027,7 +1072,7 @@ int main(void)
                  * x [8 pixels per character] x [@cols characters]
                  * + [allowance for OSD box lead-in and lead-out] */
 
-                switch (config.display_timing) {
+                switch (running_display_timing) {
                 case DISP_VGA:
                     if (startup_display_spi == DISP_SPI1)
                         tim1->ccr3 = 2 * 8 * cur_display->cols + 36;

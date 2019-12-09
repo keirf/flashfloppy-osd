@@ -13,6 +13,10 @@ FLAGS += -Wstrict-prototypes -Wredundant-decls -Wnested-externs
 FLAGS += -fno-common -fno-exceptions -fno-strict-aliasing
 FLAGS += -mlittle-endian -mthumb -mcpu=cortex-m3 -mfloat-abi=soft
 
+ifneq ($(debug),y)
+FLAGS += -DNDEBUG
+endif
+
 FLAGS += -MMD -MF .$(@F).d
 DEPS = .*.d
 

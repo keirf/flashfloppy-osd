@@ -14,6 +14,8 @@ export ROOT := $(CURDIR)
 
 all:
 	$(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
+debug:
+	debug=y $(MAKE) -C src -f $(ROOT)/Rules.mk $(PROJ).elf $(PROJ).bin $(PROJ).hex
 clean:
 	rm -rf $(PROJ)-$(VER)*
 	$(MAKE) -f $(ROOT)/Rules.mk $@

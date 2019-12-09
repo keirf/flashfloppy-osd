@@ -14,6 +14,10 @@ enum dispen { DISPCTL_tristate = 0, DISPCTL_enable_high, DISPCTL_enable_low, DIS
  * PA15 is Display Enable: Active HIGH
  * PA15 is Display Enable: Active LOW */
 
+enum timings { DISP_15KHZ=0, DISP_VGA, DISP_AUTO, DISP_MAX };
+
+enum polarities { SYNC_LOW=0, SYNC_HIGH, SYNC_AUTO, SYNC_MAX };
+
 extern struct __packed config {
 
     uint16_t polarity;
@@ -24,11 +28,11 @@ extern struct __packed config {
 
     uint16_t rows;
 
-#define DISP_15KHZ 0
-#define DISP_VGA 1
+    /* timings enum
+     * DISP_15KHZ 0
+     * DISP_VGA   1
+     * DISP_AUTO  2 */
     uint16_t display_timing;
-
-    uint16_t display_autosync;
 
 #define DISP_SPI2 0
 #define DISP_SPI1 1

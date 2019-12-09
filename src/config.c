@@ -18,19 +18,24 @@ const static struct config *flash_config = (struct config *)0x0800fc00;
 
 struct config config;
 
-extern void setup_spi(void);
+extern void setup_spi(uint16_t video_mode);
+extern uint16_t running_polarity;
+extern uint16_t running_display_timing;
 
 const static char *dispen_pretty[] = { "None", "PA15 Act.HIGH", "PA15 Act.LOW" };
 /* PB15 is tristate outside OSD; PA15 unused
  * PA15 is Display Enable: Active HIGH
  * PA15 is Display Enable: Active LOW */
 
+const static char *timing_pretty[] = { "15kHz", "VGA", "Auto" };
+
+const static char *polarity_pretty[] = { "Low", "High", "Auto" };
+
 static void config_printk(const struct config *conf)
 {
     printk("\nCurrent config:\n");
-    printk(" Sync: Active %s\n", conf->polarity ? "HIGH" : "LOW");
-    printk(" Pixel Timing: %s\n", config.display_timing ? "VGA" : "15kHz");
-    printk(" Auto Sync: %s\n", config.display_autosync ? "ON" : "OFF");
+    printk(" Sync Polarity: %s\n", polarity_pretty[conf->polarity]);
+    printk(" Pixel Timing: %s\n", timing_pretty[config.display_timing]);
     printk(" Display Height: %s\n", conf->display_2Y ? "Double" : "Normal");
     printk(" Display Output: %s\n", config.display_spi ? "PA7/SPI1" : "PB15/SPI2");
     printk(" Display Enable: %s\n", dispen_pretty[config.dispctl_mode] );
@@ -95,7 +100,6 @@ static enum {
     /* Output */
     C_polarity,
     C_disptiming,
-    C_autosync,
     C_disp2Y,
     C_spibus,
     C_dispen,
@@ -227,28 +231,50 @@ void config_process(uint8_t b)
     case C_polarity:
         if (changed)
             cnf_prt(0, "Sync Polarity:");
-        if (b & (B_LEFT|B_RIGHT))
-            config.polarity ^= 1;
-        if (b)
-            cnf_prt(1, "Active %s", config.polarity ? "HIGH" : "LOW");
+        if (b & B_LEFT) {
+            if (config.polarity > 0)
+                --config.polarity;
+            else
+                config.polarity = SYNC_MAX-1;
+        }
+        if (b & B_RIGHT) {
+            if (++config.polarity >= SYNC_MAX)
+                config.polarity = 0;
+        }
+        if (b & (B_LEFT|B_RIGHT)) {
+            if (config.polarity != SYNC_AUTO)
+                running_polarity = config.polarity;
+        }
+        if (b) {
+            if (config.polarity == SYNC_AUTO)
+                cnf_prt(1, "%s (%s)", polarity_pretty[config.polarity], polarity_pretty[running_polarity]);
+            else
+                cnf_prt(1, "%s", polarity_pretty[config.polarity]);
+        }
         break;
     case C_disptiming:
         if (changed)
             cnf_prt(0, "Pixel Timing:");
-        if (b & (B_LEFT|B_RIGHT)) {
-            config.display_timing ^= 1;
-            setup_spi();
+        if (b & B_LEFT) {
+            if (config.display_timing > 0)
+                --config.display_timing;
+            else
+                config.display_timing = DISP_MAX-1;
         }
-        if (b)
-            cnf_prt(1, "%s", config.display_timing ? "VGA" : "15kHz");
-        break;
-    case C_autosync:
-        if (changed)
-            cnf_prt(0, "Auto Sync:");
-        if (b & (B_LEFT|B_RIGHT))
-            config.display_autosync ^= 1;
-        if (b)
-            cnf_prt(1, "%s", config.display_autosync ? "ON" : "OFF");
+        if (b & B_RIGHT) {
+            if (++config.display_timing >= DISP_MAX)
+                config.display_timing = 0;
+        }
+        if (b & (B_LEFT|B_RIGHT)) {
+            if (config.display_timing != DISP_AUTO)
+                setup_spi(config.display_timing);
+        }
+        if (b) {
+            if (config.display_timing == DISP_AUTO)
+                cnf_prt(1, "%s (%s)", timing_pretty[config.display_timing], timing_pretty[running_display_timing]);
+            else
+                cnf_prt(1, "%s", timing_pretty[config.display_timing]);
+        }
         break;
     case C_disp2Y:
         if (changed)
