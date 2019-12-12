@@ -19,7 +19,6 @@ const static struct config dfl_config = {
     .dispctl_mode = DISPCTL_tristate,
     .rows = 2,
     .display_timing = DISP_15KHZ,
-    .display_autosync = FALSE,
     .display_spi = DISP_SPI2,
     .display_2Y = FALSE,
 
