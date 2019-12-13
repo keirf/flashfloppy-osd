@@ -114,6 +114,7 @@ void amiga_init(void);
 #define B_RIGHT 2
 #define B_SELECT 4
 #define B_PROCESSED 8
+#define B_AUTODISP 16    /* auto sync or polarity has changed */
 
 /* Serial I/O */
 void console_init(void);

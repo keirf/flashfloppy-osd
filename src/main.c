@@ -526,12 +526,12 @@ static void IRQ_osd_end(void)
     if (startup_display_spi == DISP_SPI1) {
         dma_display_spi1.ccr = 0;
         dma_display_spi1.cndtr = cur_display->cols/2 + 1;
-        if ((config.display_2Y == FALSE) || (hline & 0x1))
+        if ((config.display_2Y == FALSE) || ((vstart + hline) & 0x1))
             dma_display_spi1.cmar += sizeof(display_dat[0]);
     } else {
         dma_display_spi2.ccr = 0;
         dma_display_spi2.cndtr = cur_display->cols/2 + 1;
-        if ((config.display_2Y == FALSE) || (hline & 0x1))
+        if ((config.display_2Y == FALSE) || ((vstart + hline) & 0x1))
             dma_display_spi2.cmar += sizeof(display_dat[0]);
     }
 }
@@ -808,6 +808,7 @@ void do_autosync(void)
         printk("Switch to PAL/NTSC: %d Hz < 20kHz\n", avg_hz);
 #endif
         setup_spi(DISP_15KHZ);
+        buttons |= B_AUTODISP;
     } else if ((avg_hz >= 20000)
                && (running_display_timing != DISP_VGA)) {
         /* VGA */
@@ -815,6 +816,7 @@ void do_autosync(void)
         printk("Switch to VGA: %d Hz > 20kHz\n", avg_hz);
 #endif
         setup_spi(DISP_VGA);
+        buttons |= B_AUTODISP;
     }
 }
 
@@ -1010,10 +1012,15 @@ int main(void)
             if (config.polarity == SYNC_AUTO) {
 #ifndef NDEBUG
                 printk ("%d high %d low %d\n", sync_sum_ptr, sync_sum_high, sync_sum_low );
-                if (running_polarity != detected_polarity)
+#endif
+
+                if (running_polarity != detected_polarity) {
+                    running_polarity = detected_polarity;
+                    buttons |= B_AUTODISP;
+#ifndef NDEBUG
                     printk("Polarity to active %s\n",detected_polarity ? "HIGH" : "LOW");
 #endif
-                running_polarity = detected_polarity;
+                }
             }
         }
 
@@ -1092,7 +1099,8 @@ int main(void)
                 tim1->ccr4 = tim1->ccr3 - sysclk_us(1);
                 barrier(); /* Set post-OSD timeout /then/ enable display */
                 if (config.display_2Y)
-                    display_height = 2*height;
+                    /* dont double the 2 line bottom padding */
+                    display_height = 2*height-2;
                 else
                     display_height = height;
             } else {
