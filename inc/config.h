@@ -70,7 +70,7 @@ extern bool_t config_active;
 extern struct display config_display;
 
 void config_init(void);
-void config_process(uint8_t b);
+void config_process(uint8_t b, bool_t autosync_changed);
 
 /*
  * Local variables:

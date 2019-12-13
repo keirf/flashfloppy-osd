@@ -526,12 +526,18 @@ static void IRQ_osd_end(void)
     if (startup_display_spi == DISP_SPI1) {
         dma_display_spi1.ccr = 0;
         dma_display_spi1.cndtr = cur_display->cols/2 + 1;
-        if ((config.display_2Y == FALSE) || (hline & 0x1))
+
+        /* If we're double height, only update dma display pointer
+         * when this is an odd line number of the display area
+         * We're doing double rows, vstart has single row resolution
+         * check oddness using difference between this line and start */
+        if ((config.display_2Y == FALSE) || ((hline - vstart) & 0x1))
             dma_display_spi1.cmar += sizeof(display_dat[0]);
+
     } else {
         dma_display_spi2.ccr = 0;
         dma_display_spi2.cndtr = cur_display->cols/2 + 1;
-        if ((config.display_2Y == FALSE) || (hline & 0x1))
+        if ((config.display_2Y == FALSE) || ((hline - vstart) & 0x1))
             dma_display_spi2.cmar += sizeof(display_dat[0]);
     }
 }
@@ -775,12 +781,15 @@ void setup_spi(uint16_t video_mode)
 }
 
 static time_t auto_time;
-void do_autosync(void)
+static bool_t do_autosync(void)
 {
     unsigned int avg_hz;
     time_t avg_sync_time;
     bool_t valid_sync_data;
     int i;
+
+    if (config.display_timing != DISP_AUTO)
+        return FALSE;
 
     avg_sync_time = 0;
     for (i = 0; i < sync_log_MAX; i++)
@@ -795,7 +804,7 @@ void do_autosync(void)
             valid_sync_data = FALSE;
     }
     if (!valid_sync_data)
-        return;
+        return FALSE;
 
     /* 9MHz clock, 15.625kHz => 576 => PAL/NTSC
      * 9MHz clock, 20.000kHz => 450 => my threshold
@@ -804,18 +813,30 @@ void do_autosync(void)
     if ((avg_hz < 20000)
         && (running_display_timing != DISP_15KHZ)) {
         /* PAL/NTSC */
-#ifndef NDEBUG
-        printk("Switch to PAL/NTSC: %d Hz < 20kHz\n", avg_hz);
-#endif
+        dprintk("Switch to PAL/NTSC: %d Hz < 20kHz\n", avg_hz);
         setup_spi(DISP_15KHZ);
     } else if ((avg_hz >= 20000)
                && (running_display_timing != DISP_VGA)) {
         /* VGA */
-#ifndef NDEBUG
-        printk("Switch to VGA: %d Hz > 20kHz\n", avg_hz);
-#endif
+        dprintk("Switch to VGA: %d Hz > 20kHz\n", avg_hz);
         setup_spi(DISP_VGA);
     }
+
+    return TRUE;
+}
+
+static bool_t do_polarity_autosync(void)
+{
+    if (config.polarity != SYNC_AUTO)
+        return FALSE;
+
+    if (running_polarity == detected_polarity)
+        return FALSE;
+
+    dprintk("Polarity to active %s\n",
+            detected_polarity ? "HIGH" : "LOW");
+    running_polarity = detected_polarity;
+    return TRUE;
 }
 
 int main(void)
@@ -823,7 +844,7 @@ int main(void)
     static struct display no_display;
     int i;
     time_t frame_time;
-    bool_t lost_sync, _keyboard_held;
+    bool_t lost_sync, _keyboard_held, autosync_changed;
 
     watchdog_init();
 
@@ -970,7 +991,7 @@ int main(void)
     }
 
     frame_time = auto_time = time_now();
-    lost_sync = FALSE;
+    lost_sync = autosync_changed = FALSE;
 
     _keyboard_held = keyboard_held;
 
@@ -1002,19 +1023,11 @@ int main(void)
             IRQ_global_enable();
         }
 
+        /* Periodically apply the measurement results of autosync. */
         if (time_diff(auto_time, time_now()) > time_ms(1000)) {
             auto_time = time_now();
-            if (config.display_timing == DISP_AUTO)
-                do_autosync();
-
-            if (config.polarity == SYNC_AUTO) {
-#ifndef NDEBUG
-                printk ("%d high %d low %d\n", sync_sum_ptr, sync_sum_high, sync_sum_low );
-                if (running_polarity != detected_polarity)
-                    printk("Polarity to active %s\n",detected_polarity ? "HIGH" : "LOW");
-#endif
-                running_polarity = detected_polarity;
-            }
+            autosync_changed |= do_autosync();
+            autosync_changed |= do_polarity_autosync();
         }
 
         /* Keyboard hold/release notifier? */
@@ -1053,7 +1066,9 @@ int main(void)
                 }
             }
 
-            /* Next frame height depends on #rows and height of each row. */
+            /* Next frame height depends on #rows and height of each row.
+             * 10 = 8px font + 2 lines below it.
+             * +2 for the 2 lines that render_line() adds at the top */
             height = cur_display->rows*10+2;
             for (i = 0; i < cur_display->rows; i++)
                 if (cur_display->heights & (1<<i))
@@ -1125,7 +1140,8 @@ int main(void)
             /* Fold in button presses remoted via I2C. */
             b |= i2c_buttons_rx;
             /* Pass button presses to config subsystem for processing. */
-            config_process(b & ~B_PROCESSED);
+            config_process(b & ~B_PROCESSED, autosync_changed);
+            autosync_changed = FALSE;
         }
 
         i2c_process();

@@ -71,6 +71,12 @@ int vprintk(const char *format, va_list ap)
 int printk(const char *format, ...)
     __attribute__ ((format (printf, 1, 2)));
 
+#if !defined(NDEBUG)
+#define dprintk(f, a...) printk(f, ##a)
+#else
+static inline int dprintk(const char *format, ...) { return 0; }
+#endif
+
 #define le16toh(x) (x)
 #define le32toh(x) (x)
 #define htole16(x) (x)

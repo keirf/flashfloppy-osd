@@ -158,12 +158,13 @@ uint8_t button_repeat(uint8_t pb, uint8_t b, uint8_t m, struct repeat *r)
     return b;
 }
 
-void config_process(uint8_t b)
+void config_process(uint8_t b, bool_t autosync_changed)
 {
     uint8_t _b;
     static uint8_t pb;
     bool_t changed = FALSE;
-    static enum { C_SAVE = 0, C_SAVEREBOOT, C_USE, C_DISCARD, C_RESET, C_NC_MAX} new_config;
+    static enum { C_SAVE = 0, C_SAVEREBOOT, C_USE, C_DISCARD,
+                  C_RESET, C_NC_MAX } new_config;
     static struct config old_config;
 
     _b = b;
@@ -245,7 +246,7 @@ void config_process(uint8_t b)
             if (config.polarity != SYNC_AUTO)
                 running_polarity = config.polarity;
         }
-        if (b) {
+        if (b || autosync_changed) {
             if (config.polarity == SYNC_AUTO)
                 cnf_prt(1, "%s (%s)", polarity_pretty[config.polarity], polarity_pretty[running_polarity]);
             else
@@ -269,7 +270,7 @@ void config_process(uint8_t b)
             if (config.display_timing != DISP_AUTO)
                 setup_spi(config.display_timing);
         }
-        if (b) {
+        if (b || autosync_changed) {
             if (config.display_timing == DISP_AUTO)
                 cnf_prt(1, "%s (%s)", timing_pretty[config.display_timing], timing_pretty[running_display_timing]);
             else
