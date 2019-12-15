@@ -128,6 +128,10 @@ static uint16_t startup_dispctl_mode;
 uint16_t running_display_timing;
 uint16_t running_polarity, detected_polarity;
 
+/* flag for config system to repaint some menu options */
+bool_t auto_has_changed;
+
+
 /* Guard the stacks with known values. */
 static void canary_init(void)
 {
@@ -526,12 +530,18 @@ static void IRQ_osd_end(void)
     if (startup_display_spi == DISP_SPI1) {
         dma_display_spi1.ccr = 0;
         dma_display_spi1.cndtr = cur_display->cols/2 + 1;
-        if ((config.display_2Y == FALSE) || ((vstart + hline) & 0x1))
+
+        /* If we're double height, only update dma display pointer
+         * when this is an odd line number of the display area
+         * We're doing double rows, vstart has single row resolution
+         * check oddness using difference between this line and start */
+        if ((config.display_2Y == FALSE) || ((hline - vstart) & 0x1))
             dma_display_spi1.cmar += sizeof(display_dat[0]);
+
     } else {
         dma_display_spi2.ccr = 0;
         dma_display_spi2.cndtr = cur_display->cols/2 + 1;
-        if ((config.display_2Y == FALSE) || ((vstart + hline) & 0x1))
+        if ((config.display_2Y == FALSE) || ((hline - vstart) & 0x1))
             dma_display_spi2.cmar += sizeof(display_dat[0]);
     }
 }
@@ -808,7 +818,7 @@ void do_autosync(void)
         printk("Switch to PAL/NTSC: %d Hz < 20kHz\n", avg_hz);
 #endif
         setup_spi(DISP_15KHZ);
-        buttons |= B_AUTODISP;
+        auto_has_changed = TRUE;
     } else if ((avg_hz >= 20000)
                && (running_display_timing != DISP_VGA)) {
         /* VGA */
@@ -816,7 +826,7 @@ void do_autosync(void)
         printk("Switch to VGA: %d Hz > 20kHz\n", avg_hz);
 #endif
         setup_spi(DISP_VGA);
-        buttons |= B_AUTODISP;
+        auto_has_changed = TRUE;
     }
 }
 
@@ -1016,7 +1026,7 @@ int main(void)
 
                 if (running_polarity != detected_polarity) {
                     running_polarity = detected_polarity;
-                    buttons |= B_AUTODISP;
+                    auto_has_changed = TRUE;
 #ifndef NDEBUG
                     printk("Polarity to active %s\n",detected_polarity ? "HIGH" : "LOW");
 #endif
@@ -1060,7 +1070,9 @@ int main(void)
                 }
             }
 
-            /* Next frame height depends on #rows and height of each row. */
+            /* Next frame height depends on #rows and height of each row.
+             * 10 = 8px font + 2 lines below it.
+             * +2 for the 2 lines that render_line() adds at the top */
             height = cur_display->rows*10+2;
             for (i = 0; i < cur_display->rows; i++)
                 if (cur_display->heights & (1<<i))
@@ -1099,8 +1111,7 @@ int main(void)
                 tim1->ccr4 = tim1->ccr3 - sysclk_us(1);
                 barrier(); /* Set post-OSD timeout /then/ enable display */
                 if (config.display_2Y)
-                    /* dont double the 2 line bottom padding */
-                    display_height = 2*height-2;
+                    display_height = 2*height;
                 else
                     display_height = height;
             } else {

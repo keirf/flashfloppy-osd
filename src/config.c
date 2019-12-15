@@ -21,6 +21,7 @@ struct config config;
 extern void setup_spi(uint16_t video_mode);
 extern uint16_t running_polarity;
 extern uint16_t running_display_timing;
+extern bool_t auto_has_changed;
 
 const static char *dispen_pretty[] = { "None", "PA15 Act.HIGH", "PA15 Act.LOW" };
 /* PB15 is tristate outside OSD; PA15 unused
@@ -245,7 +246,7 @@ void config_process(uint8_t b)
             if (config.polarity != SYNC_AUTO)
                 running_polarity = config.polarity;
         }
-        if (b) {
+        if (b|auto_has_changed) {
             if (config.polarity == SYNC_AUTO)
                 cnf_prt(1, "%s (%s)", polarity_pretty[config.polarity], polarity_pretty[running_polarity]);
             else
@@ -269,7 +270,7 @@ void config_process(uint8_t b)
             if (config.display_timing != DISP_AUTO)
                 setup_spi(config.display_timing);
         }
-        if (b) {
+        if (b|auto_has_changed) {
             if (config.display_timing == DISP_AUTO)
                 cnf_prt(1, "%s (%s)", timing_pretty[config.display_timing], timing_pretty[running_display_timing]);
             else
@@ -387,6 +388,7 @@ void config_process(uint8_t b)
         break;
     }
     }
+    auto_has_changed = FALSE;
 }
 
 /*
