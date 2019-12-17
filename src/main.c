@@ -261,20 +261,16 @@ static void slave_arr_update(void)
             vstart = config.v_off*2;
             if (startup_display_spi == DISP_SPI1) {
                 hstart = config.h_off * 7;
-
-                /* Enable output pin first (TIM4) and then start SPI transfers (TIM2).
-                 * timers run at 72 MHz, pixel clock is 36 MHz, 2 count per pixel
-                 * (13-1)/2 = 6 pixel
-                 */
+                /* Enable output pin first (TIM4) and then start SPI transfers
+                 * (TIM2). Timers run at 72 MHz, pixel clock is 36 MHz, 2 ticks
+                 * per pixel: (13-1)/2 = 6 pixel */
                 tim4->arr = hstart-12;
                 tim2->arr = hstart-1;
             } else {
                 hstart = config.h_off * 7;
-
-                /* Enable output pin first (TIM4) and then start SPI transfers (TIM2).
-                 * timers run at 72 MHz, pixel clock is 18 MHz, 4 count per pixel
-                 * (25-1)/4 = 6 pixel
-                 */
+                /* Enable output pin first (TIM4) and then start SPI transfers
+                 * (TIM2). Timers run at 72 MHz, pixel clock is 18 MHz, 4 ticks
+                 * per pixel: (25-1)/4 = 6 pixel */
                 tim4->arr = hstart-24;
                 tim2->arr = hstart-1;
             }
@@ -284,10 +280,9 @@ static void slave_arr_update(void)
         default:
             vstart = config.v_off;
             hstart = config.h_off * 20;
-
-            /* Enable output pin first (TIM4) and then start SPI transfers (TIM2).
-             * timers run at 72 MHz, pixel clock is 9 MHz, 8 count per pixel
-             * (49-1)/8 = 6 pixel */
+            /* Enable output pin first (TIM4) and then start SPI transfers
+             * (TIM2). Timers run at 72 MHz, pixel clock is 9 MHz, 8 ticks per
+             * pixel: (49-1)/8 = 6 pixel */
             tim4->arr = hstart-49;
             tim2->arr = hstart-1;
         break;
@@ -443,23 +438,30 @@ static void setup_dispctl_mode(void)
 
     case DISPCTL_tristate:
         /* PA15: Unused 
-         * PB15: Tristate outside OSD box */
+         * SPIx: Tristate outside OSD box */
 
-        if (startup_display_spi == DISP_SPI1)
-        { // PA7 SPI1
-            gpio_configure_pin(gpio_display_spi1, pin_display_spi1, GPI_floating);
+        if (startup_display_spi == DISP_SPI1) {
+            /* PA7, SPI1 */
+            gpio_configure_pin(gpio_display_spi1, pin_display_spi1,
+                               GPI_floating);
             dispctl_reg = (uint32_t)(unsigned long)&gpio_display_spi1->crl;
-            gpio_configure_pin(gpio_display_spi1, pin_display_spi1, AFO_pushpull(_50MHz));
+            gpio_configure_pin(gpio_display_spi1, pin_display_spi1,
+                               AFO_pushpull(_50MHz));
             dispctl_on = gpio_display_spi1->crl;
-            gpio_configure_pin(gpio_display_spi1, pin_display_spi1, GPI_floating);
+            gpio_configure_pin(gpio_display_spi1, pin_display_spi1,
+                               GPI_floating);
             dispctl_off = gpio_display_spi1->crl;
 
-        } else { // PB15 SPI2
-            gpio_configure_pin(gpio_display_spi2, pin_display_spi2, GPI_floating);
+        } else {
+            /* PB15, SPI2 */
+            gpio_configure_pin(gpio_display_spi2, pin_display_spi2,
+                               GPI_floating);
             dispctl_reg = (uint32_t)(unsigned long)&gpio_display_spi2->crh;
-            gpio_configure_pin(gpio_display_spi2, pin_display_spi2, AFO_pushpull(_50MHz));
+            gpio_configure_pin(gpio_display_spi2, pin_display_spi2,
+                               AFO_pushpull(_50MHz));
             dispctl_on = gpio_display_spi2->crh;
-            gpio_configure_pin(gpio_display_spi2, pin_display_spi2, GPI_floating);
+            gpio_configure_pin(gpio_display_spi2, pin_display_spi2,
+                               GPI_floating);
             dispctl_off = gpio_display_spi2->crh;
         }
         break;
@@ -467,13 +469,15 @@ static void setup_dispctl_mode(void)
     case DISPCTL_enable_high:
     case DISPCTL_enable_low: {
         /* PA15: Display Enable: Active HIGH or LOW 
-         * PB15: Always driven */
+         * SPIx: Always driven */
         bool_t active_low = (startup_dispctl_mode == DISPCTL_enable_low);
 
         if (startup_display_spi == DISP_SPI1) {
-            gpio_configure_pin(gpio_display_spi1, pin_display_spi1, AFO_pushpull(_50MHz));
+            gpio_configure_pin(gpio_display_spi1, pin_display_spi1,
+                               AFO_pushpull(_50MHz));
         } else {
-            gpio_configure_pin(gpio_display_spi2, pin_display_spi2, AFO_pushpull(_50MHz));
+            gpio_configure_pin(gpio_display_spi2, pin_display_spi2,
+                               AFO_pushpull(_50MHz));
         }
 
         gpio_configure_pin(gpio_dispen, pin_dispen,

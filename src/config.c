@@ -22,10 +22,8 @@ extern void setup_spi(uint16_t video_mode);
 extern uint16_t running_polarity;
 extern uint16_t running_display_timing;
 
-const static char *dispen_pretty[] = { "None", "PA15 Act.HIGH", "PA15 Act.LOW" };
-/* PB15 is tristate outside OSD; PA15 unused
- * PA15 is Display Enable: Active HIGH
- * PA15 is Display Enable: Active LOW */
+const static char *dispen_pretty[] = {
+    "None", "PA15 Act.HIGH", "PA15 Act.LOW" };
 
 const static char *timing_pretty[] = { "15kHz", "VGA", "Auto" };
 
@@ -37,7 +35,8 @@ static void config_printk(const struct config *conf)
     printk(" Sync Polarity: %s\n", polarity_pretty[conf->polarity]);
     printk(" Pixel Timing: %s\n", timing_pretty[config.display_timing]);
     printk(" Display Height: %s\n", conf->display_2Y ? "Double" : "Normal");
-    printk(" Display Output: %s\n", config.display_spi ? "PA7/SPI1" : "PB15/SPI2");
+    printk(" Display Output: %s\n",
+           config.display_spi ? "PA7/SPI1" : "PB15/SPI2");
     printk(" Display Enable: %s\n", dispen_pretty[config.dispctl_mode] );
     printk(" H.Off: %u\n", conf->h_off);
     printk(" V.Off: %u\n", conf->v_off);
@@ -248,7 +247,8 @@ void config_process(uint8_t b, bool_t autosync_changed)
         }
         if (b || autosync_changed) {
             if (config.polarity == SYNC_AUTO)
-                cnf_prt(1, "%s (%s)", polarity_pretty[config.polarity], polarity_pretty[running_polarity]);
+                cnf_prt(1, "%s (%s)", polarity_pretty[config.polarity],
+                        polarity_pretty[running_polarity]);
             else
                 cnf_prt(1, "%s", polarity_pretty[config.polarity]);
         }
@@ -272,7 +272,8 @@ void config_process(uint8_t b, bool_t autosync_changed)
         }
         if (b || autosync_changed) {
             if (config.display_timing == DISP_AUTO)
-                cnf_prt(1, "%s (%s)", timing_pretty[config.display_timing], timing_pretty[running_display_timing]);
+                cnf_prt(1, "%s (%s)", timing_pretty[config.display_timing],
+                        timing_pretty[running_display_timing]);
             else
                 cnf_prt(1, "%s", timing_pretty[config.display_timing]);
         }
