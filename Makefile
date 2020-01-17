@@ -1,5 +1,5 @@
 
-export FW_VER := 1.7
+export FW_VER := 1.8
 
 PROJ = FF_OSD
 VER := v$(FW_VER)
@@ -35,7 +35,7 @@ dist: all
 endif
 
 BAUD=921600
-DEV=/dev/ttyUSB1
+DEV=/dev/ttyUSB0
 
 flash: all
 	sudo ~/stm32flash/stm32flash -b $(BAUD) \

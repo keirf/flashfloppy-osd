@@ -11,7 +11,7 @@
 
 const static struct config dfl_config = {
 
-    .polarity = FALSE,
+    .polarity = SYNC_LOW,
     .h_off = 42,
     .v_off = 50,
     .min_cols = 16,
