@@ -138,7 +138,7 @@ void i2c_process(void);
 extern struct display i2c_display;
 extern bool_t i2c_osd_protocol;
 extern uint8_t i2c_buttons_rx; /* Gotek -> FF_OSD */
-extern struct __packed i2c_osd_info {
+extern struct packed i2c_osd_info {
     uint8_t protocol_ver;
     uint8_t fw_major, fw_minor;
     uint8_t buttons;

@@ -9,7 +9,10 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-enum dispen { DISPCTL_tristate = 0, DISPCTL_enable_high, DISPCTL_enable_low, DISPCTL_MAX };
+enum dispen { DISPCTL_tristate = 0,
+              DISPCTL_enable_high,
+              DISPCTL_enable_low,
+              DISPCTL_MAX };
 /* PB15 is tristate outside OSD; PA15 unused
  * PA15 is Display Enable: Active HIGH
  * PA15 is Display Enable: Active LOW */
@@ -18,7 +21,7 @@ enum timings { DISP_15KHZ=0, DISP_VGA, DISP_AUTO, DISP_MAX };
 
 enum polarities { SYNC_LOW=0, SYNC_HIGH, SYNC_AUTO, SYNC_MAX };
 
-extern struct __packed config {
+extern struct packed config {
 
     uint16_t polarity;
 
@@ -53,7 +56,7 @@ extern struct __packed config {
     /* Mask of user-assigned pins which are HIGH at power on. */
     uint8_t user_pin_high;
     uint8_t _pad;
-    struct __packed config_hotkey {
+    struct packed config_hotkey {
         /* Mask of user pins modified by this hotkey. */
         uint8_t pin_mod;
         /* Mask of user pins driven HIGH by this hotkey. 
