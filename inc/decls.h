@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <limits.h>
 
 #include "intrinsics.h"
 #include "util.h"
