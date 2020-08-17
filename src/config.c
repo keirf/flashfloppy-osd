@@ -100,8 +100,6 @@ static enum {
     C_polarity,
     C_disptiming,
     C_disp2Y,
-    C_spibus,
-    C_dispen,
     C_h_off,
     C_v_off,
     /* LCD */
@@ -110,7 +108,9 @@ static enum {
     C_max_cols,
     /* Exit */
     C_save,
-    C_max
+    C_max,
+    C_spibus,
+    C_dispen,
 } config_state;
 
 static void cnf_prt(int row, const char *format, ...)

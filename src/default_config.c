@@ -61,7 +61,7 @@ const static struct config dfl_config = {
     }
 #endif
 
-#if 0
+#if 1
     /* An example configuration for DF0/DF1 switching, for Piotr. 
      * Also an example of multi-row hotkey description text. */
     .user_pin_opendrain = 0,
