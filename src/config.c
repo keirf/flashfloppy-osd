@@ -80,6 +80,11 @@ void config_init(void)
         config_write_flash(&config);
     }
 
+    /* Hotkey configuration is stored in flash-config space but not actually
+     * runtime modifiable or viewable. So, to avoid confusion, always use the 
+     * compile-time hotkey configuration. */
+    memcpy(config.hotkey, dfl_config.hotkey, sizeof(config.hotkey));
+
     config_printk(&config);
 
     printk("\nKeys:\n Space: Select\n O: Down\n P: Up\n");
