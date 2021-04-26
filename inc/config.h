@@ -62,6 +62,9 @@ extern struct packed config {
         /* Mask of user pins driven HIGH by this hotkey. 
          * Pins in @pin_mod but not in @pin_high are driven LOW. */
         uint8_t pin_high;
+        uint16_t flags;
+/* HKF_momentary: Pins are driven the opposite way on key release. */
+#define HKF_momentary 1
         char str[30];
     } hotkey[10];
 

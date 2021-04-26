@@ -649,13 +649,20 @@ static void update_amiga_keys(void)
         hk_pressed = amiga_key_pressed(AMI_F(i+1));
         if (!((hk_latch>>i & 1) ^ hk_pressed))
             continue;
-        /* State has changed: Is the hotkey now pressed? */
-        hk_latch ^= 1u << i;
-        if (!hk_pressed)
-            continue;
-        /* Hotkey is now pressed: Perform configured action. */
+        /* Calculate the GPIO set/reset masks. */
         s = (uint16_t)hk->pin_high << pin_u0;
         r = (uint16_t)(hk->pin_mod & ~hk->pin_high) << pin_u0;
+        /* State has changed: Is the hotkey now pressed? */
+        hk_latch ^= 1u << i;
+        if (!hk_pressed) {
+            if (hk->flags & HKF_momentary) {
+                /* Momentary hotkeys have their action reversed on release. */
+                gpio_user->bsrr = ((uint32_t)s << 16) | r;
+                notify.on = FALSE;
+            }
+            continue;
+        }
+        /* Hotkey is now pressed: Perform configured action. */
         gpio_user->bsrr = ((uint32_t)r << 16) | s;
         if (*(p = hk->str)) {
             notify.cols = notify.rows = 0;
