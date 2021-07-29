@@ -3,6 +3,10 @@
 ** Keir Fraser <keir.xen@gmail.com>
 ************************************
 
+** v1.9 - 29 July 2021
+ - Support AT32F403 chip as alternative to STM32F103
+ - Support momentary-action hotkeys
+
 ** v1.8 - 17 January 2020
  - Support VGA (30kHz) video timing
  - Support PA7 (SPI1) as display-output pin for higher-resolution VGA OSD
