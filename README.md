@@ -13,12 +13,12 @@ LCD.
 - [**Download FF OSD**][Downloads]
 
 ## Documentation
-- [**Read the GitHub Wiki**](https://github.com/keirf/FF_OSD/wiki)
+- [**Read the GitHub Wiki**](https://github.com/keirf/flashfloppy-osd/wiki)
 
 ## Redistribution
 
 FF OSD source code, and all binary releases, are freely redistributable
 in any form. Please see the [license](COPYING).
 
-[FF]: https://github.com/keirf/FlashFloppy/wiki
-[Downloads]: https://github.com/keirf/FF_OSD/wiki/Downloads
+[FF]: https://github.com/keirf/flashfloppy/wiki
+[Downloads]: https://github.com/keirf/flashfloppy-osd/wiki/Downloads
