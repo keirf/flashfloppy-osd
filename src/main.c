@@ -626,11 +626,23 @@ static void update_amiga_keys(void)
 
     /* OSD On/Off. */
     if ((del_pressed ^ amiga_key_pressed(AMI_DEL)) && (del_pressed ^= 1)) {
+        int row;
         osd_on ^= 1;
-        snprintf((char *)notify.text[0], sizeof(notify.text[0]),
+        memset(notify.text, 0, sizeof(notify.text));
+        if ((running_display_timing == DISP_VGA)
+            && (startup_display_spi == DISP_SPI1)) {
+            row = 1;
+            notify.rows = 3;
+            notify.heights = 1u << row; /* Row index 1 -> double height */
+        } else {
+            row = 0;
+            notify.rows = 1;
+            notify.heights = 0;
+        }
+        snprintf((char *)notify.text[row], sizeof(notify.text[row]),
                  "OSD O%s", osd_on ? "n" : "ff");
-        notify.cols = strlen((char *)notify.text[0]);
-        notify.rows = 1;
+        notify.cols = (row == 0) ? strlen((char *)notify.text[row])
+            : sizeof(notify.text[row]);
         notify.on = TRUE;
         notify_time = time_now();
     }
@@ -727,6 +739,11 @@ void display_off(void)
 
 void setup_spi1(void)
 {
+    /* Reset SPI Port. */
+    rcc->apb2rstr |= RCC_APB2RSTR_SPI1RST;
+    rcc->apb2rstr &= ~RCC_APB2RSTR_SPI1RST;
+    rcc->apb2enr |= RCC_APB2ENR_SPI1EN;
+
     /* Configure SPI: 16-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     /* SPI1 is on APB2 which runs at 72MHz */
     spi_display_spi1->cr2 = SPI_CR2_TXDMAEN;
@@ -754,6 +771,11 @@ void setup_spi1(void)
 
 void setup_spi2(void)
 {
+    /* Reset SPI Port. */
+    rcc->apb1rstr |= RCC_APB1RSTR_SPI2RST;
+    rcc->apb1rstr &= ~RCC_APB1RSTR_SPI2RST;
+    rcc->apb1enr |= RCC_APB1ENR_SPI2EN;
+
     /* Configure SPI: 16-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     /* SPI2 is on APB1 which runs at 36MHz */
     spi_display_spi2->cr2 = SPI_CR2_TXDMAEN;

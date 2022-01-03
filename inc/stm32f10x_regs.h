@@ -262,6 +262,9 @@ struct rcc {
 #define RCC_AHBRSTR_ETHMACRST (1u<<14)
 #define RCC_AHBRSTR_OTGFSRST (1u<<12)
 
+#define RCC_APB1RSTR_SPI2RST (1u<< 14)
+#define RCC_APB2RSTR_SPI1RST (1u<< 12)
+
 #define RCC_BASE 0x40021000
 
 /* Independent Watchdog */
