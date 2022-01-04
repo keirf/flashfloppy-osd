@@ -677,15 +677,58 @@ static void update_amiga_keys(void)
         /* Hotkey is now pressed: Perform configured action. */
         gpio_user->bsrr = ((uint32_t)r << 16) | s;
         if (*(p = hk->str)) {
-            notify.cols = notify.rows = 0;
             memset(notify.text, 0, sizeof(notify.text));
-            while (*p) {
-                int len = strlen(p);
-                strcpy((char *)notify.text[notify.rows], p);
-                notify.cols = max(notify.cols, len);
-                notify.rows++;
-                p += len + 1;
+            if ((running_display_timing == DISP_VGA)
+                && (startup_display_spi == DISP_SPI1)) {
+
+                /* In VGA mode, don't resize the OSD box. */
+                char buf[LEN(notify.text)][LEN(notify.text[0])];
+                int rows;
+                rows = 0;
+                memset(buf, '\0', sizeof(buf));
+                while (*p) {
+                    int len = strlen(p);
+                    strcpy(buf[rows], p);
+                    rows++;
+                    p += len + 1;
+                }
+                notify.rows = rows;
+                switch (rows) {
+                    case 1:
+                        /* One line of text: Double height at second row. */
+                        strcpy((char *)notify.text[notify.rows], buf[--rows]);
+                        notify.heights = 1u << notify.rows;
+                        notify.rows = LEN(notify.text)-1;
+                        break;
+                    case 2:
+                        /* Two lines of text: Normal height 2nd and 3rd row. */
+                        for (rows = 0; rows < notify.rows; rows++)
+                            strcpy((char *)notify.text[rows+1], buf[rows]);
+                        notify.heights = 0;
+                        notify.rows = LEN(notify.text);
+                        break;
+                    default:
+                        /* Three or four lines of text: Start from first row. */
+                        for (rows = 0; rows < notify.rows; rows++)
+                            strcpy((char *)notify.text[rows], buf[rows]);
+                        notify.heights = 0;
+                        notify.rows = LEN(notify.text);
+                        break;
+                }
+                /* Set notify.cols to maximum to retain the OSD size. */
+                notify.cols = LEN(notify.text[0]);
+            } else {
+                /* 15 kHz mode or SPI2 output. */
+                notify.cols = notify.rows = 0;
+                while (*p) {
+                    int len = strlen(p);
+                    strcpy((char *)notify.text[notify.rows], p);
+                    notify.cols = max(notify.cols, len);
+                    notify.rows++;
+                    p += len + 1;
+                }
             }
+            notify.cols = max(notify.cols, LEN(notify.text[0]));
             notify.on = TRUE;
             notify_time = time_now();
         }
