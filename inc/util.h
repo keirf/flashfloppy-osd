@@ -46,7 +46,6 @@ void *memset(void *s, int c, size_t n);
 void *memcpy(void *dest, const void *src, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
 
-#define LEN(arr) ((int) (sizeof (arr) / sizeof (arr)[0]))
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);
 int strcmp(const char *s1, const char *s2);
@@ -144,6 +143,9 @@ extern struct packed i2c_osd_info {
     uint8_t fw_major, fw_minor;
     uint8_t buttons;
 } i2c_osd_info;
+
+/* Slave OSD on I2C2. */
+bool_t slave_init(void);
 
 /* Build info. */
 extern const char fw_ver[];
