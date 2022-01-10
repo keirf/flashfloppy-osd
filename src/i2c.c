@@ -5,37 +5,51 @@
  *  1. Emulate HD44780 LCD controller via a PCF8574 I2C backpack.
  *  2. Support extended custom protocol with bidirectional comms.
  * 
+ * I2C communications to a "slave" OSD that duplicates the output.
+ *
  * Written & released by Keir Fraser <keir.xen@gmail.com>
+ * I2C "slave" OSD driving contributed by Torsten Kurbad <amiga@tk-webart.de>
  * 
  * This is free and unencumbered software released into the public domain.
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-/* PCF8574 pin assignment: D7-D6-D5-D4-BL-EN-RW-RS */
-#define _D7 (1u<<7)
-#define _D6 (1u<<6)
-#define _D5 (1u<<5)
-#define _D4 (1u<<4)
 #define _BL (1u<<3)
 #define _EN (1u<<2)
 #define _RW (1u<<1)
 #define _RS (1u<<0)
 
+/* FF OSD I2C address. */
+#define OSD_I2C_ADDR     0x10
+
 /* Current position in FF OSD I2C Protocol character data. */
 static uint8_t ff_osd_x, ff_osd_y;
 
-/* STM32 I2C peripheral. */
+/* STM32 I2C peripherals. */
+/* Slave: i2c1 */
 #define i2c i2c1
 #define SCL 6
 #define SDA 7
+/* Master: i2c2 */
+#define i2cm i2c2
+#define SCL2 10
+#define SDA2 11
 
 /* I2C error ISR. */
+/* Slave. */
 #define I2C_ERROR_IRQ 32
 void IRQ_32(void) __attribute__((alias("IRQ_i2c_error")));
+/* Master. */
+#define I2CM_ERROR_IRQ 34
+void IRQ_34(void) __attribute__((alias("IRQ_i2cm_error")));
 
 /* I2C event ISR. */
+/* Slave. */
 #define I2C_EVENT_IRQ 31
 void IRQ_31(void) __attribute__((alias("IRQ_i2c_event")));
+/* Master. */
+#define I2CM_EVENT_IRQ 33
+void IRQ_33(void) __attribute__((alias("IRQ_i2cm_event")));
 
 /* I2C data ring. */
 static uint8_t d_ring[1024];
@@ -58,7 +72,7 @@ bool_t i2c_osd_protocol; /* using the custom protocol? */
 uint8_t i2c_buttons_rx; /* button state: Gotek -> OSD */
 struct i2c_osd_info i2c_osd_info; /* state: OSD -> Gotek */
 
-/* I2C Error ISR: As slave with clock stretch we can only receive:
+/* I2C Slave Error ISR: As slave with clock stretch we can only receive:
  *  Bus error (BERR): Peripheral automatically recovers
  *  Acknowledge Failure (AF): Peripheral automatically recovers */
 static void IRQ_i2c_error(void)
@@ -67,6 +81,7 @@ static void IRQ_i2c_error(void)
     i2c->sr1 &= ~I2C_SR1_ERRORS;
 }
 
+/* I2C Slave Event ISR. */
 static void IRQ_i2c_event(void)
 {
     static uint8_t rp;
@@ -97,6 +112,64 @@ static void IRQ_i2c_event(void)
     }
 }
 
+/* I2C Master data buffer. Data is sent via interrupt to the Slave OSD. */
+static uint8_t buffer[256];
+volatile static uint8_t buffer_len, b;
+
+/* I2C Master Error ISR: Reset the peripheral and reinit everything. */
+static void IRQ_i2cm_error(void)
+{
+    /* Dump and clear I2C errors. */
+    printk("I2C2: Error (%04x)\n", (uint16_t)(i2cm->sr1 & I2C_SR1_ERRORS));
+    i2cm->sr1 &= ~I2C_SR1_ERRORS;
+
+    /* Clear the I2C peripheral. */
+    i2cm->cr1 = 0;
+    i2cm->cr1 = I2C_CR1_SWRST;
+
+    slave_init();
+}
+
+/* I2C Master Event ISR. */
+static void IRQ_i2cm_event(void)
+{
+    uint16_t sr1 = i2cm->sr1;
+
+    if (sr1 & I2C_SR1_SB) {
+        /* Send address. Clears SR1_SB. */
+        i2cm->dr = OSD_I2C_ADDR << 1;
+        b = 0;
+    }
+
+    if (sr1 & I2C_SR1_ADDR) {
+        /* Read SR2 clears SR1_ADDR. */
+        (void)i2cm->sr2;
+    }
+
+    if (sr1 & I2C_SR1_TXE) {
+        /* Send buffer byte by byte. */
+        if (b < buffer_len) {
+            uint8_t *buf = buffer;
+            i2cm->dr = buf[b++];
+        }
+    }
+
+    if (sr1 & I2C_SR1_RXNE) {
+        /* Read DR clears SR1_RXNE. */
+        (void)i2cm->dr;
+    }
+
+    if (sr1 & I2C_SR1_BTF) {
+        if (b == buffer_len) {
+            /* Transfer ended. Send stop sequence and disable IRQ*/
+            i2cm->cr1 |= I2C_CR1_STOP;
+            while (i2cm->cr1 & I2C_CR1_STOP)
+                continue;
+            i2cm->cr2 &= ~I2C_CR2_ITEVTEN;
+        }
+    }
+}
+
 /* FF OSD command set */
 #define OSD_BACKLIGHT    0x00 /* [0] = backlight on */
 #define OSD_DATA         0x02 /* next columns*rows bytes are text data */
@@ -105,6 +178,192 @@ static void IRQ_i2c_event(void)
 #define OSD_BUTTONS      0x30 /* [3:0] = button mask */
 #define OSD_COLUMNS      0x40 /* [6:0] = #columns */
 
+/* I2C Master. */
+static bool_t has_slave;
+static uint8_t slave_ver;
+static bool_t i2cm_dead;
+
+/* Display data sent to slave display. */
+struct display *slave_display;
+
+/* Wait for given status condition @s while also checking for errors. */
+static bool_t i2cm_wait(uint8_t s)
+{
+    stk_time_t t = stk_now();
+    while ((i2cm->sr1 & s) != s) {
+        if (i2cm->sr1 & I2C_SR1_ERRORS) {
+            i2cm->sr1 &= ~I2C_SR1_ERRORS;
+            return FALSE;
+        }
+        if (stk_diff(t, stk_now()) > stk_ms(10)) {
+            /* I2C bus seems to be locked up. */
+            i2cm_dead = TRUE;
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+/* Synchronously transmit the I2C START sequence.
+ * Caller must already have asserted I2C_CR1_START. */
+#define I2C_RD TRUE
+#define I2C_WR FALSE
+static bool_t i2cm_start(bool_t rd)
+{
+    if (!i2cm_wait(I2C_SR1_SB))
+        return FALSE;
+    i2cm->dr = (OSD_I2C_ADDR << 1) | rd;
+    if (!i2cm_wait(I2C_SR1_ADDR))
+        return FALSE;
+    (void)i2cm->sr2;
+    return TRUE;
+}
+
+/* Synchronously transmit the I2C STOP sequence. */
+static void i2cm_stop(void)
+{
+    i2cm->cr1 |= I2C_CR1_STOP;
+    while (i2cm->cr1 & I2C_CR1_STOP)
+        continue;
+}
+
+/* Synchronously transmit an I2C byte. */
+static bool_t i2cm_sync_write(uint8_t b)
+{
+    i2cm->dr = b;
+    return i2cm_wait(I2C_SR1_BTF);
+}
+
+/* Check whether an I2C device is responding at OSD_I2C_ADDR. */
+static bool_t i2cm_probe(void)
+{
+    i2cm->cr1 |= I2C_CR1_START;
+    if (!i2cm_start(I2C_WR) || !i2cm_sync_write(0))
+        return FALSE;
+    i2cm_stop();
+    return TRUE;
+}
+
+/* Snapshot display buffer into the command and start sending
+ * asynchronously. */
+void slave_send_display(void)
+{
+    if (has_slave) {
+        uint8_t *q = buffer;
+        unsigned int row;
+
+        *q++ = OSD_BACKLIGHT | slave_display->on;
+        *q++ = OSD_COLUMNS | slave_display->cols;
+        *q++ = OSD_ROWS | slave_display->rows;
+        *q++ = OSD_HEIGHTS | slave_display->heights;
+        *q++ = OSD_BUTTONS | 0;
+        *q++ = OSD_DATA;
+        for (row = 0; row < slave_display->rows; row++) {
+            memcpy(q, slave_display->text[row], slave_display->cols);
+            q += slave_display->cols;
+        }
+
+        buffer_len = q - buffer;
+
+        i2cm->cr2 |= I2C_CR2_ITEVTEN;
+        i2cm->cr1 |= I2C_CR1_START;
+    }
+}
+
+bool_t slave_init(void)
+{
+    i2cm_dead = FALSE;
+
+    /* Check we have a clear I2C bus. Both clock and data must be high. If SDA
+     * is stuck low then slave may be stuck in an ACK cycle. We can try to
+     * unwedge the slave in that case and drive it into the STOP condition. */
+    gpio_configure_pin(gpiob, SCL2, GPO_opendrain(_2MHz, HIGH));
+    gpio_configure_pin(gpiob, SDA2, GPO_opendrain(_2MHz, HIGH));
+    delay_us(10);
+    if (gpio_read_pin(gpiob, SCL2) && !gpio_read_pin(gpiob, SDA2)) {
+        printk("I2C Master: SDA2 held by slave? Fixing... ");
+        /* We will hold SDA2 low (as slave is) and also drive SCL2 low to end
+         * the current ACK cycle. */
+        gpio_write_pin(gpiob, SDA2, FALSE);
+        gpio_write_pin(gpiob, SCL2, FALSE);
+        delay_us(10);
+        /* Slave should no longer be driving SDA2 low (but we still are).
+         * Now prepare for the STOP condition by setting SCL2 high. */
+        gpio_write_pin(gpiob, SCL2, TRUE);
+        delay_us(10);
+        /* Enter the STOP condition by setting SDA high while SCL is high. */
+        gpio_write_pin(gpiob, SDA2, TRUE);
+        delay_us(10);
+        printk("%s\n",
+               !gpio_read_pin(gpiob, SCL2) || !gpio_read_pin(gpiob, SDA2)
+               ? "Still held" : "Done");
+    }
+
+    /* Check the bus is not floating (or still stuck!). We shouldn't be able to
+     * pull the lines low with our internal weak pull-downs (min. 30kohm). */
+    if (!has_slave) {
+        bool_t scl2, sda2;
+        gpio_configure_pin(gpiob, SCL2, GPI_pull_down);
+        gpio_configure_pin(gpiob, SDA2, GPI_pull_down);
+        delay_us(10);
+        scl2 = gpio_read_pin(gpiob, SCL2);
+        sda2 = gpio_read_pin(gpiob, SDA2);
+        if (!scl2 || !sda2) {
+            gpio_configure_pin(gpiob, SCL2, AFO_opendrain(_2MHz));
+            gpio_configure_pin(gpiob, SDA2, AFO_opendrain(_2MHz));
+            printk("I2C Master: Invalid bus SCL2=%u SDA2=%u\n", scl2, sda2);
+            return FALSE;
+        }
+    }
+
+    /* Reset I2C2 peripheral. */
+    rcc->apb1enr &= ~RCC_APB1ENR_I2C2EN;
+    rcc->apb1enr |= RCC_APB1ENR_I2C2EN;
+
+    /* Standard Mode (100kHz) */
+    i2cm->cr1 = 0;
+    i2cm->cr2 = I2C_CR2_FREQ(2);
+    i2cm->ccr = I2C_CCR_CCR(180);
+    i2cm->trise = 37;
+    i2cm->cr1 = I2C_CR1_PE;
+
+    gpio_configure_pin(gpiob, SCL2, AFO_opendrain(_2MHz));
+    gpio_configure_pin(gpiob, SDA2, AFO_opendrain(_2MHz));
+
+    if (!has_slave) {
+        /* Probe the bus for I2C devices: We support a single FF OSD device. */
+        has_slave = i2cm_probe();
+        if (!has_slave) {
+            printk("I2C Master: %s\n",
+                   i2cm_dead ? "Bus locked up?" : "No device found");
+            return FALSE;
+        }
+
+        /* Probe the FF OSD device if we found one. */
+        if (has_slave) {
+            /* Read: Retrieve the version number. */
+            i2cm->cr1 |= I2C_CR1_START;
+            if (i2cm_start(I2C_RD) && i2cm_wait(I2C_SR1_RXNE))
+                slave_ver = i2cm->dr;
+            printk("I2C Master: Slave OSD found (ver %x)\n", slave_ver);
+            i2cm_stop();
+        }
+    }
+
+    /* Enable the Event IRQ. */
+    IRQx_set_prio(I2CM_EVENT_IRQ, I2CM_IRQ_PRI);
+    IRQx_clear_pending(I2CM_EVENT_IRQ);
+    IRQx_enable(I2CM_EVENT_IRQ);
+
+    /* Enable the Error IRQ. */
+    IRQx_set_prio(I2CM_ERROR_IRQ, I2CM_IRQ_PRI);
+    IRQx_clear_pending(I2CM_ERROR_IRQ);
+    IRQx_enable(I2CM_ERROR_IRQ);
+
+    return TRUE;
+}
+
+/* I2C Slave. */
 static void ff_osd_process(void)
 {
     uint16_t d_c, d_p, t_c, t_p;
@@ -301,7 +560,7 @@ void i2c_init(void)
 
     /* Initialise I2C. */
     i2c->cr1 = 0;
-    i2c->oar1 = (i2c_osd_protocol ? 0x10 : 0x27) << 1;
+    i2c->oar1 = (i2c_osd_protocol ? OSD_I2C_ADDR : 0x27) << 1;
     i2c->cr2 = (I2C_CR2_FREQ(36) |
                 I2C_CR2_ITERREN |
                 I2C_CR2_ITEVTEN |

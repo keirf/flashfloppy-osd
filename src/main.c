@@ -255,6 +255,7 @@ static void button_timer_fn(void *unused)
 #define MAX_DISPLAY_HEIGHT 52
 static uint16_t display_dat[MAX_DISPLAY_HEIGHT][40/2+1];
 static struct display *cur_display = &i2c_display;
+struct display no_display;
 static uint16_t display_height;
 
 
@@ -602,7 +603,7 @@ static void render_line(int y, const struct display *display)
 }
 
 /* Keypress action notifier. */
-static struct display notify;
+struct display notify;
 static time_t notify_time;
 
 /* We snapshot the relevant Amiga keys so that we can scan the keymap (and 
@@ -941,7 +942,6 @@ static bool_t do_polarity_autosync(void)
 
 int main(void)
 {
-    static struct display no_display;
     int i;
     time_t frame_time;
     bool_t lost_sync, _keyboard_held, autosync_changed;
@@ -1089,8 +1089,11 @@ int main(void)
 
     _keyboard_held = keyboard_held;
 
-    for (;;) {
+    /* Initialize slave OSD connected to I2C2. */
+    delay_ms(100);   /* Wait for slave to come up. */
+    slave_init();
 
+    for (;;) {
         watchdog_kick();
 
         canary_check();
@@ -1138,7 +1141,6 @@ int main(void)
 
         /* Have we just finished generating a frame? */
         if (frame) {
-
             uint16_t height;
 
             if (lost_sync) {
@@ -1159,6 +1161,9 @@ int main(void)
                     cur_display = &notify;
                 }
             }
+
+            slave_display = config_active ? &no_display : cur_display;
+            slave_send_display();
 
             /* Next frame height depends on #rows and height of each row.
              * 10 = 8px font + 2 lines below it.
