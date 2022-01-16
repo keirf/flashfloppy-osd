@@ -9,9 +9,6 @@
  * See the file COPYING for more details, or visit <http://unlicense.org>.
  */
 
-#define F(x) (x-1)
-#define U(x) (1u<<x)
-
 const static struct config *flash_config = (struct config *)0x0800fc00;
 
 #include "default_config.c"

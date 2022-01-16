@@ -9,6 +9,7 @@ OBJS += string.o
 OBJS += stm32f10x.o
 OBJS += time.o
 OBJS += timer.o
+OBJS += userpin.o
 OBJS += util.o
 OBJS += vectors.o
 

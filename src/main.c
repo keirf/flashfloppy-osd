@@ -33,6 +33,10 @@
  *  B6: CLK
  *  B7: DAT
  * 
+ * I2C2 Interface (to slave OSD):
+ *  B10: CLK2
+ *  B11: DAT2
+ * 
  * Display:
  *  A7: Display output SPI1
  *  A8: CSYNC or HSYNC
@@ -44,10 +48,13 @@
  *  B3: KBDAT
  *  B4: KBCLK
  * 
+ * Amiga signals:
+ *  A12: CTS
+ * 
  * User outputs:
  *  B8:  U0
  *  B9:  U1
- *  B10: U2
+ *  B12: U2
  */
 
 /* CSYNC/HSYNC (A8): EXTI IRQ trigger and TIM1 Ch.1 trigger. */
@@ -109,10 +116,6 @@ void IRQ_28(void) __attribute__((alias("IRQ_osd_pre_start")));
 /* Display Enable (A15): If using an external tristate buffer. */
 #define gpio_dispen gpioa
 #define pin_dispen  15
-
-/* User outputs are PB8 upwards. */
-#define gpio_user gpiob
-#define pin_u0 8
 
 /* List of interrupts used by the display-sync and -output system. */
 const static uint8_t irqs[] = {
@@ -252,6 +255,7 @@ static void button_timer_fn(void *unused)
 #define MAX_DISPLAY_HEIGHT 52
 static uint16_t display_dat[MAX_DISPLAY_HEIGHT][40/2+1];
 static struct display *cur_display = &i2c_display;
+struct display no_display;
 static uint16_t display_height;
 
 
@@ -599,7 +603,7 @@ static void render_line(int y, const struct display *display)
 }
 
 /* Keypress action notifier. */
-static struct display notify;
+struct display notify;
 static time_t notify_time;
 
 /* We snapshot the relevant Amiga keys so that we can scan the keymap (and 
@@ -614,7 +618,7 @@ static bool_t osd_on = TRUE;
 
 static void update_amiga_keys(void)
 {
-    int i;
+    int i, row;
     static bool_t del_pressed;
 
     /* Check keys-as-buttons. */
@@ -627,10 +631,21 @@ static void update_amiga_keys(void)
     /* OSD On/Off. */
     if ((del_pressed ^ amiga_key_pressed(AMI_DEL)) && (del_pressed ^= 1)) {
         osd_on ^= 1;
-        snprintf((char *)notify.text[0], sizeof(notify.text[0]),
+        memset(notify.text, 0, sizeof(notify.text));
+        if ((running_display_timing == DISP_VGA)
+            && (startup_display_spi == DISP_SPI1)) {
+            row = 1;
+            notify.rows = 3;
+            notify.heights = 1u << row; /* Row index 1 -> double height */
+        } else {
+            row = 0;
+            notify.rows = 1;
+            notify.heights = 0;
+        }
+        snprintf((char *)notify.text[row], sizeof(notify.text[row]),
                  "OSD O%s", osd_on ? "n" : "ff");
-        notify.cols = strlen((char *)notify.text[0]);
-        notify.rows = 1;
+        notify.cols = (row == 0) ? strlen((char *)notify.text[row])
+            : sizeof(notify.text[row]);
         notify.on = TRUE;
         notify_time = time_now();
     }
@@ -643,17 +658,39 @@ static void update_amiga_keys(void)
         uint32_t s, r;
         char *p;
         /* Unused hotkey? */
-        if (hk->pin_mod == 0)
+        if ((hk->flags ^ HKF_videoswitch) && (hk->pin_mod == 0))
             continue;
         /* Has hotkey press/release state changed? */
         hk_pressed = amiga_key_pressed(AMI_F(i+1));
         if (!((hk_latch>>i & 1) ^ hk_pressed))
             continue;
+        /* State has changed: Is the hotkey now pressed? */
+        hk_latch ^= 1u << i;
+        /* Video input switch hotkey? */
+        if (hk_pressed && (hk->flags & HKF_videoswitch)) {
+            videoswitch_next();
+            memset(notify.text, 0, sizeof(notify.text));
+            if ((running_display_timing == DISP_VGA)
+                && (startup_display_spi == DISP_SPI1)) {
+                row = 1;
+                notify.rows = 3;
+                notify.heights = 1u << row; /* See OSD On/Off. */
+            } else {
+                row = 0;
+                notify.rows = 1;
+                notify.heights = 0;
+            }
+            strcpy((char *)notify.text[row],
+                   vs_state_pretty[videoswitch_state]);
+            notify.cols = (row == 0) ? strlen((char *)notify.text[row])
+                           : sizeof(notify.text[row]);
+            notify.on = TRUE;
+            notify_time = time_now();
+            continue;
+        }
         /* Calculate the GPIO set/reset masks. */
         s = (uint16_t)hk->pin_high << pin_u0;
         r = (uint16_t)(hk->pin_mod & ~hk->pin_high) << pin_u0;
-        /* State has changed: Is the hotkey now pressed? */
-        hk_latch ^= 1u << i;
         if (!hk_pressed) {
             if (hk->flags & HKF_momentary) {
                 /* Momentary hotkeys have their action reversed on release. */
@@ -665,15 +702,58 @@ static void update_amiga_keys(void)
         /* Hotkey is now pressed: Perform configured action. */
         gpio_user->bsrr = ((uint32_t)r << 16) | s;
         if (*(p = hk->str)) {
-            notify.cols = notify.rows = 0;
             memset(notify.text, 0, sizeof(notify.text));
-            while (*p) {
-                int len = strlen(p);
-                strcpy((char *)notify.text[notify.rows], p);
-                notify.cols = max(notify.cols, len);
-                notify.rows++;
-                p += len + 1;
+            if ((running_display_timing == DISP_VGA)
+                && (startup_display_spi == DISP_SPI1)) {
+
+                /* In VGA mode, don't resize the OSD box. */
+                char buf[ARRAY_SIZE(notify.text)][ARRAY_SIZE(notify.text[0])];
+                int rows;
+                rows = 0;
+                memset(buf, '\0', sizeof(buf));
+                while (*p) {
+                    int len = strlen(p);
+                    strcpy(buf[rows], p);
+                    rows++;
+                    p += len + 1;
+                }
+                notify.rows = rows;
+                switch (rows) {
+                    case 1:
+                        /* One line of text: Double height at second row. */
+                        strcpy((char *)notify.text[notify.rows], buf[--rows]);
+                        notify.heights = 1u << notify.rows;
+                        notify.rows = ARRAY_SIZE(notify.text)-1;
+                        break;
+                    case 2:
+                        /* Two lines of text: Normal height 2nd and 3rd row. */
+                        for (rows = 0; rows < notify.rows; rows++)
+                            strcpy((char *)notify.text[rows+1], buf[rows]);
+                        notify.heights = 0;
+                        notify.rows = ARRAY_SIZE(notify.text);
+                        break;
+                    default:
+                        /* Three or four lines of text: Start from first row. */
+                        for (rows = 0; rows < notify.rows; rows++)
+                            strcpy((char *)notify.text[rows], buf[rows]);
+                        notify.heights = 0;
+                        notify.rows = ARRAY_SIZE(notify.text);
+                        break;
+                }
+                /* Set notify.cols to maximum to retain the OSD size. */
+                notify.cols = ARRAY_SIZE(notify.text[0]);
+            } else {
+                /* 15 kHz mode or SPI2 output. */
+                notify.cols = notify.rows = 0;
+                while (*p) {
+                    int len = strlen(p);
+                    strcpy((char *)notify.text[notify.rows], p);
+                    notify.cols = max(notify.cols, len);
+                    notify.rows++;
+                    p += len + 1;
+                }
             }
+            notify.cols = max(notify.cols, (int)ARRAY_SIZE(notify.text[0]));
             notify.on = TRUE;
             notify_time = time_now();
         }
@@ -727,6 +807,11 @@ void display_off(void)
 
 void setup_spi1(void)
 {
+    /* Reset SPI Port. */
+    rcc->apb2rstr |= RCC_APB2RSTR_SPI1RST;
+    rcc->apb2rstr &= ~RCC_APB2RSTR_SPI1RST;
+    rcc->apb2enr |= RCC_APB2ENR_SPI1EN;
+
     /* Configure SPI: 16-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     /* SPI1 is on APB2 which runs at 72MHz */
     spi_display_spi1->cr2 = SPI_CR2_TXDMAEN;
@@ -754,6 +839,11 @@ void setup_spi1(void)
 
 void setup_spi2(void)
 {
+    /* Reset SPI Port. */
+    rcc->apb1rstr |= RCC_APB1RSTR_SPI2RST;
+    rcc->apb1rstr &= ~RCC_APB1RSTR_SPI2RST;
+    rcc->apb1enr |= RCC_APB1ENR_SPI2EN;
+
     /* Configure SPI: 16-bit mode, MSB first, CPOL Low, CPHA Leading Edge. */
     /* SPI2 is on APB1 which runs at 36MHz */
     spi_display_spi2->cr2 = SPI_CR2_TXDMAEN;
@@ -852,7 +942,6 @@ static bool_t do_polarity_autosync(void)
 
 int main(void)
 {
-    static struct display no_display;
     int i;
     time_t frame_time;
     bool_t lost_sync, _keyboard_held, autosync_changed;
@@ -897,15 +986,7 @@ int main(void)
         running_polarity = SYNC_HIGH;
 
     /* Set user pin output modes and initial logic levels. */
-    for (i = 0; i < 3; i++) {
-        bool_t level = (config.user_pin_high >> i) & 1;
-        if (config.user_pin_opendrain & (1u<<i))
-            gpio_configure_pin(gpio_user, pin_u0+i,
-                               GPO_opendrain(_2MHz, level));
-        if (config.user_pin_pushpull & (1u<<i))
-            gpio_configure_pin(gpio_user, pin_u0+i,
-                               GPO_pushpull(_2MHz, level));
-    }
+    user_pin_init();
 
     /* Display DMA setup: From memory into the Display Timer's CCRx. */
     if (startup_display_spi == DISP_SPI1)
@@ -1008,8 +1089,11 @@ int main(void)
 
     _keyboard_held = keyboard_held;
 
-    for (;;) {
+    /* Initialize slave OSD connected to I2C2. */
+    delay_ms(100);   /* Wait for slave to come up. */
+    slave_init();
 
+    for (;;) {
         watchdog_kick();
 
         canary_check();
@@ -1057,7 +1141,6 @@ int main(void)
 
         /* Have we just finished generating a frame? */
         if (frame) {
-
             uint16_t height;
 
             if (lost_sync) {
@@ -1078,6 +1161,9 @@ int main(void)
                     cur_display = &notify;
                 }
             }
+
+            slave_display = config_active ? &no_display : cur_display;
+            slave_send_display();
 
             /* Next frame height depends on #rows and height of each row.
              * 10 = 8px font + 2 lines below it.
@@ -1158,6 +1244,7 @@ int main(void)
         }
 
         i2c_process();
+        videoswitch_update();
     }
 
     return 0;
