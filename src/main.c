@@ -1010,6 +1010,8 @@ int main(void)
 
     for (;;) {
 
+        cpu_relax();
+
         watchdog_kick();
 
         canary_check();
