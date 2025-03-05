@@ -10,9 +10,9 @@
 | 7 |    | Disp.Out.SPI1 |  Y | I2C SDA          |
 | 8 |  Y | CSYNC/HSYNC   |  Y | User Out (U0)    |
 | 9 |  Y | Serial Tx     |  Y | User Out (U1)    |
-|10 |  Y | Serial Rx     |  Y | User Out (U2)    |
-|11 |  Y |               |  Y | Atari KB         |
-|12 |  Y |               |  Y |                  |
+|10 |  Y | Serial Rx     |  Y | I2C2 SCL         |
+|11 |  Y | Atari KB      |  Y | I2C2 SDA         |
+|12 |  Y | Amiga CTS     |  Y | User Out (U2)    |
 |13 |  Y | **NA** (SWDIO)|  Y | SPI2.SCK         |
 |14 |  Y | **NA** (SWCLK)|  Y | VSYNC            |
 |15 |  Y | Disp.Enable   |  Y | Disp.Out. (RGB)  |

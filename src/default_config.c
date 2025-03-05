@@ -76,6 +76,38 @@ const static struct config dfl_config = {
     }
 #endif
 
+#if 0
+    /* An example configuration for switching ROMs and video input.
+     *  F1-F4: Switch between ROMs #1-#4 via binary value at pins U1,U0.
+     *  F10:   Toggle U2 between (mirror GPIO input A12 - high - low)
+     */
+
+    /* U0 and U1 are configured open drain and need external pullups.
+     * U2 is handled by the HKF_videoswitch configuration flag. */
+    .user_pin_opendrain = U(1) | U(0),
+    .user_pin_pushpull  = 0,
+
+    /* ROM #1 selected. */
+    .user_pin_high      = 0,
+
+    .hotkey = {
+        /* F1-F4: ROM switching. */
+        [F(1)]  = { .str = "ROM #1",
+                    .pin_mod  = U(1) | U(0), },
+        [F(2)]  = { .str = "ROM #2",
+                    .pin_mod  = U(1) | U(0),
+                    .pin_high =        U(0), },
+        [F(3)]  = { .str = "ROM #3",
+                    .pin_mod  = U(1) | U(0),
+                    .pin_high = U(1)       , },
+        [F(4)]  = { .str = "ROM #4",
+                    .pin_mod  = U(1) | U(0),
+                    .pin_high = U(1) | U(0), },
+        /* F10: Switch video source */
+        [F(10)] = { .flags = HKF_videoswitch, },
+    }
+#endif
+
 #undef F
 #undef U
 
@@ -91,4 +123,3 @@ const static struct config dfl_config = {
  * indent-tabs-mode: nil
  * End:
  */
-

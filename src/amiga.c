@@ -116,7 +116,7 @@ static void IRQ_amikbd_clk(void)
     handshake();
 }
 
-/* TIM3 is shared with timer.c: We demuux to the correct handler based on 
+/* TIM3 is shared with timer.c: We demux to the correct handler based on 
  * flags in TIM3->SR. */
 static void IRQ_TIM3_demux(void)
 {

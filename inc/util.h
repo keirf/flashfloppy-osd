@@ -136,6 +136,8 @@ struct display {
 void i2c_init(void);
 void i2c_process(void);
 extern struct display i2c_display;
+extern struct display no_display;
+extern struct display notify;
 extern bool_t i2c_osd_protocol;
 extern uint8_t i2c_buttons_rx; /* Gotek -> FF_OSD */
 extern struct packed i2c_osd_info {
@@ -143,6 +145,11 @@ extern struct packed i2c_osd_info {
     uint8_t fw_major, fw_minor;
     uint8_t buttons;
 } i2c_osd_info;
+
+/* Slave OSD on I2C2. */
+extern struct display *slave_display;
+bool_t slave_init(void);
+void slave_send_display(void);
 
 /* Build info. */
 extern const char fw_ver[];
@@ -158,6 +165,7 @@ extern uint32_t _irq_stacktop[], _irq_stackbottom[];
 
 /* IRQ priorities, 0 (highest) to 15 (lowest). */
 #define SYNC_IRQ_PRI          2
+#define I2CM_IRQ_PRI          3
 #define I2C_IRQ_PRI           4
 #define AMIKBD_IRQ_PRI        5
 #define TIMER_IRQ_PRI         8

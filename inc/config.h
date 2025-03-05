@@ -65,6 +65,11 @@ extern struct packed config {
         uint16_t flags;
 /* HKF_momentary: Pins are driven the opposite way on key release. */
 #define HKF_momentary 1
+/* HKF_videoswitch: This hotkey enables video source switching using U2 as
+ *     an open drain output.
+ *     If this is set, GPIO pin A12 is configured as an input pin that is
+ *     mirrored to U2 while the video source is switched to "Auto". */
+#define HKF_videoswitch 2
         char str[30];
     } hotkey[10];
 
